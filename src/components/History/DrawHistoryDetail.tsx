@@ -59,26 +59,22 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
 
   const sortedTickets = useMemo(() => {
     const sorted = [...ticketsWithPrizes];
+    const getSortTime = (ticket: Ticket & { calculatedTotalPrize: number }) => {
+      const createdAtValue = (ticket as any).createdAt;
+      const createdAt = typeof createdAtValue === 'number' ? createdAtValue : 0;
+      return createdAt > 0 ? createdAt : (ticket.timestamp || 0);
+    };
+
     if (hasDrawResults) {
       sorted.sort((a, b) => {
-        const prizeA = a.calculatedTotalPrize;
-        const prizeB = b.calculatedTotalPrize;
-        
-        if (prizeA > 0 && prizeB > 0) return prizeB - prizeA;
-        if (prizeA > 0) return -1;
-        if (prizeB > 0) return 1;
-        const customerA = getCustomerDisplayName(a.customerName, a.sequenceNumber, a.id);
-        const customerB = getCustomerDisplayName(b.customerName, b.sequenceNumber, b.id);
-        if (customerA !== customerB) return customerA.localeCompare(customerB, 'es', { sensitivity: 'base' });
-        return b.timestamp - a.timestamp;
+        const aIsWinner = a.calculatedTotalPrize > 0;
+        const bIsWinner = b.calculatedTotalPrize > 0;
+
+        if (aIsWinner !== bIsWinner) return aIsWinner ? -1 : 1;
+        return getSortTime(b) - getSortTime(a);
       });
     } else {
-      sorted.sort((a, b) => {
-        const customerA = getCustomerDisplayName(a.customerName, a.sequenceNumber, a.id);
-        const customerB = getCustomerDisplayName(b.customerName, b.sequenceNumber, b.id);
-        if (customerA !== customerB) return customerA.localeCompare(customerB, 'es', { sensitivity: 'base' });
-        return b.timestamp - a.timestamp;
-      });
+      sorted.sort((a, b) => getSortTime(b) - getSortTime(a));
     }
     return sorted;
   }, [ticketsWithPrizes, hasDrawResults]);

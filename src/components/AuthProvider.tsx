@@ -7,7 +7,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
-import { collection, onSnapshot, query, where, doc, getDoc, setDoc, getDocs, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, getDoc, setDoc, getDocs, limit, Query, DocumentData, orderBy } from 'firebase/firestore';
 import { useStore, User, Draw, Ticket } from '../store/useStore';
 import { LogIn, Mail, Lock, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
 import { generateSellerId } from '../utils/helpers';
@@ -129,31 +129,141 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentStoreUser) return;
 
     const unsubs: (() => void)[] = [];
+    const state = useStore.getState();
+    if (state.ticketsOwnerId && state.ticketsOwnerId !== currentStoreUser.id) {
+      // Prevent showing another user's cached data while the new subscription initializes.
+      useStore.setState({
+        tickets: [],
+        users: currentStoreUser.role === 'CEO' ? state.users : [],
+      });
+    }
 
     unsubs.push(onSnapshot(collection(db, 'draws'), (snapshot) => {
       const draws = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Draw));
-      useStore.setState({ draws });
-      useStore.getState().recalculatePrizes();
+      const previousDraws = useStore.getState().draws;
+      const sameLength = previousDraws.length === draws.length;
+      const sameSignature =
+        sameLength &&
+        previousDraws.every((draw, index) => {
+          const next = draws[index];
+          return (
+            draw.id === next?.id &&
+            draw.updatedAt === next?.updatedAt &&
+            (draw.results?.join(',') || '') === (next?.results?.join(',') || '')
+          );
+        });
+
+      if (!sameSignature) {
+        useStore.setState({ draws });
+        useStore.getState().recalculatePrizes();
+      }
     }, (err) => console.error('Draws subscription error:', err)));
 
-    let q;
+    let q: Query<DocumentData>;
     if (currentStoreUser.role === 'CEO') {
-      q = query(collection(db, 'tickets'));
+      q = query(
+        collection(db, 'tickets'),
+        orderBy('timestamp', 'desc')
+      );
     } else {
-      q = query(collection(db, 'tickets'), where('userId', '==', currentStoreUser.id));
+      q = query(
+        collection(db, 'tickets'),
+        where('userId', '==', currentStoreUser.id),
+        orderBy('timestamp', 'desc')
+      );
     }
-    
+
+    useStore.setState({ isTicketsRefreshing: true });
+
     unsubs.push(onSnapshot(q, (snapshot) => {
-      const tickets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ticket));
-      tickets.sort((a, b) => b.timestamp - a.timestamp);
-      useStore.setState({ tickets });
-      useStore.getState().recalculatePrizes();
-    }, (err) => console.error('Tickets subscription error:', err)));
+      const previousTickets = useStore.getState().tickets;
+      const changes = snapshot.docChanges();
+      const isInitialLoad = previousTickets.length === 0 || changes.length === snapshot.size;
+
+      let nextTickets: Ticket[];
+      const changedTicketIds: string[] = [];
+
+      if (isInitialLoad) {
+        nextTickets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ticket));
+        changedTicketIds.push(...nextTickets.map((ticket) => ticket.id));
+      } else {
+        const ticketsById = new Map(previousTickets.map((ticket) => [ticket.id, ticket]));
+
+        changes.forEach((change) => {
+          const ticketId = change.doc.id;
+          if (change.type === 'removed') {
+            ticketsById.delete(ticketId);
+            return;
+          }
+
+          const nextTicket = { id: ticketId, ...change.doc.data() } as Ticket;
+          const prevTicket = ticketsById.get(ticketId);
+          const sameVersion =
+            prevTicket &&
+            prevTicket.timestamp === nextTicket.timestamp &&
+            prevTicket.total === nextTicket.total &&
+            prevTicket.totalPrize === nextTicket.totalPrize &&
+            prevTicket.isPaid === nextTicket.isPaid;
+
+          if (!sameVersion) {
+            changedTicketIds.push(ticketId);
+          }
+          ticketsById.set(ticketId, nextTicket);
+        });
+
+        nextTickets = Array.from(ticketsById.values());
+      }
+
+      nextTickets.sort((a, b) => b.timestamp - a.timestamp);
+
+      useStore.setState((state) => {
+        const sameLength = state.tickets.length === nextTickets.length;
+        const sameOrder =
+          sameLength &&
+          state.tickets.every((ticket, index) => ticket.id === nextTickets[index]?.id);
+
+        if (sameOrder && changedTicketIds.length === 0 && state.isTicketsRefreshing === false) {
+          return state;
+        }
+
+        return {
+          ...state,
+          tickets: nextTickets,
+          isTicketsRefreshing: false,
+          lastTicketsSyncAt: Date.now(),
+          ticketsOwnerId: currentStoreUser.id,
+        };
+      });
+
+      if (changedTicketIds.length > 0 || isInitialLoad) {
+        useStore.getState().recalculatePrizes(isInitialLoad ? undefined : changedTicketIds);
+      }
+    }, (err) => {
+      console.error('Tickets subscription error:', err);
+      useStore.setState({ isTicketsRefreshing: false });
+    }));
 
     if (currentStoreUser.role === 'CEO') {
       unsubs.push(onSnapshot(collection(db, 'users'), (snapshot) => {
         const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        useStore.setState({ users });
+        const previousUsers = useStore.getState().users;
+        const sameLength = previousUsers.length === users.length;
+        const sameSignature =
+          sameLength &&
+          previousUsers.every((user, index) => {
+            const next = users[index];
+            return (
+              user.id === next?.id &&
+              user.status === next?.status &&
+              user.role === next?.role &&
+              user.commission === next?.commission &&
+              user.capitalInjection === next?.capitalInjection
+            );
+          });
+
+        if (!sameSignature) {
+          useStore.setState({ users });
+        }
       }, (err) => console.error('Users subscription error:', err)));
     }
 

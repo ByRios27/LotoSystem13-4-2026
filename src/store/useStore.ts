@@ -47,8 +47,12 @@ export interface Entry {
 export interface Ticket {
   id: string;
   userId?: string;
+  drawId?: string;
   drawIds: string[];
   drawNames: string[];
+  entryTypes?: GameType[];
+  hasResults?: boolean;
+  isWinner?: boolean;
   drawEntries?: DrawEntryGroup[];
   entries: Entry[];
   total: number;
@@ -137,6 +141,10 @@ export type Page = 'sales' | 'history' | 'stats' | 'settings' | 'results' | 'win
 interface AppState {
   draws: Draw[];
   tickets: Ticket[];
+  isTicketsRefreshing: boolean;
+  lastTicketsSyncAt: number | null;
+  ticketsOwnerId: string | null;
+  lastSelectedDrawId: string | null;
   users: User[];
   currentUser: User | null;
   settings: AppSettings;
@@ -160,6 +168,7 @@ interface AppState {
 
   updateSettings: (settings: Partial<AppSettings>) => void;
   setCurrentPage: (page: Page) => void;
+  setLastSelectedDrawId: (drawId: string | null) => void;
   
   // Reuse & Edit logic
   reusedTicket: Ticket | null;
@@ -170,7 +179,7 @@ interface AppState {
   // Results Actions
   setResults: (drawId: string, results: string[]) => void;
   removeResults: (drawId: string) => void;
-  recalculatePrizes: () => void;
+  recalculatePrizes: (ticketIds?: string[]) => void;
   resetSalesData: () => Promise<void>;
   archiveTickets: () => Promise<void>;
   getGlobalStats: () => { totalSales: number; totalCommission: number; totalPrizes: number; totalCapitalInjection: number; utility: number };
@@ -194,6 +203,10 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       draws: [],
       tickets: [],
+      isTicketsRefreshing: false,
+      lastTicketsSyncAt: null,
+      ticketsOwnerId: null,
+      lastSelectedDrawId: null,
       users: [],
       currentUser: null,
       settings: {
@@ -293,6 +306,10 @@ export const useStore = create<AppState>()(
         const finalTicket: Ticket = {
           ...ticket,
           userId: auth.currentUser?.uid,
+          drawId: ticket.drawIds?.[0],
+          entryTypes: Array.from(new Set(accumulatedEntries.map((entry) => entry.type))),
+          hasResults: false,
+          isWinner: false,
           sellerId: currentUser.sellerId,
           drawEntries: normalizedDrawEntries,
           entries: accumulatedEntries,
@@ -335,6 +352,8 @@ export const useStore = create<AppState>()(
         const total = typeof mergedTicket.total === 'number' ? mergedTicket.total : 0;
         const finalTicket: Ticket = {
           ...mergedTicket,
+          drawId: mergedTicket.drawIds?.[0],
+          entryTypes: Array.from(new Set(getTicketFlatEntries(mergedTicket).map((entry) => entry.type))),
           drawEntries: normalizedDrawEntries,
           entries: getTicketFlatEntries(mergedTicket),
           commissionRateApplied: rate,
@@ -446,6 +465,7 @@ export const useStore = create<AppState>()(
         }));
       },
       setCurrentPage: (page) => set({ currentPage: page }),
+      setLastSelectedDrawId: (drawId) => set({ lastSelectedDrawId: drawId }),
 
       setResults: (drawId, results) => {
         set((state) => {
@@ -477,18 +497,25 @@ export const useStore = create<AppState>()(
         get().recalculatePrizes();
       },
 
-      recalculatePrizes: () => {
+      recalculatePrizes: (ticketIds) => {
         set((state) => {
+          const shouldRecalculateAll = !ticketIds || ticketIds.length === 0;
+          const targetTicketIds = shouldRecalculateAll ? null : new Set(ticketIds);
+          const drawMap = new Map(state.draws.map((draw) => [draw.id, draw]));
+
           const updatedTickets = state.tickets.map(ticket => {
+            if (!shouldRecalculateAll && !targetTicketIds?.has(ticket.id)) {
+              return ticket;
+            }
+
             let totalPrize = 0;
             const updatedDrawEntries = normalizeTicketDrawEntries(ticket).map(group => {
-              console.log('evaluating ticket for draw', ticket.id, group.drawId);
+              const draw = drawMap.get(group.drawId);
               const updatedEntries = group.entries.map(entry => {
                 let entryPrize = 0;
                 let winningPosition: '1er' | '2do' | '3er' | undefined = undefined;
                 let status: 'pending' | 'winner' | 'loser' = 'pending';
 
-                const draw = state.draws.find(d => d.id === group.drawId);
                 if (draw && draw.results && draw.results.length === 3) {
                   const { prize: currentDrawPrize, winningPosition: currentWinningPosition } = calculateEntryPrize(entry, draw, state.settings);
 
@@ -513,6 +540,12 @@ export const useStore = create<AppState>()(
 
             return {
               ...ticket,
+              drawId: ticket.drawIds?.[0],
+              hasResults: updatedDrawEntries.some((group) => {
+                const draw = drawMap.get(group.drawId);
+                return !!(draw?.results && draw.results.length === 3);
+              }),
+              isWinner: totalPrize > 0,
               drawEntries: updatedDrawEntries,
               entries: getTicketFlatEntries({ ...ticket, drawEntries: updatedDrawEntries }),
               totalPrize,
@@ -638,19 +671,26 @@ export const useStore = create<AppState>()(
     {
       name: 'lottopro-storage',
       partialize: (state) => ({ 
+        draws: state.draws,
+        tickets: state.tickets.slice(0, 600),
+        users: state.users,
         settings: state.settings,
         nextTicketSequence: state.nextTicketSequence,
         currentPage: state.currentPage,
-        currentUser: state.currentUser
+        currentUser: state.currentUser,
+        lastTicketsSyncAt: state.lastTicketsSyncAt,
+        ticketsOwnerId: state.ticketsOwnerId,
+        lastSelectedDrawId: state.lastSelectedDrawId
       }),
       merge: (persistedState: any, currentState: AppState) => {
         if (!persistedState) return currentState;
-        
-        // Explicitly ignore data that should come from Firestore
         const { draws, tickets, users, ...rest } = persistedState;
         
         return {
           ...currentState,
+          draws: Array.isArray(draws) ? draws : currentState.draws,
+          tickets: Array.isArray(tickets) ? tickets : currentState.tickets,
+          users: Array.isArray(users) ? users : currentState.users,
           ...rest,
           settings: {
             ...currentState.settings,

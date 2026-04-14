@@ -39,7 +39,9 @@ export const SalesPanel: React.FC = () => {
     nextTicketSequence, 
     incrementSequence,
     settings,
-    currentUser
+    currentUser,
+    lastSelectedDrawId,
+    setLastSelectedDrawId,
   } = useStore();
   
   // Sort active draws by time and filter by closing time
@@ -57,9 +59,12 @@ export const SalesPanel: React.FC = () => {
   const [isReuseModalOpen, setIsReuseModalOpen] = useState(false);
   const [pendingReusedTicket, setPendingReusedTicket] = useState<Ticket | null>(null);
 
-  const [selectedDrawIds, setSelectedDrawIds] = useState<string[]>(
-    activeDraws[0] ? [activeDraws[0].id] : []
-  );
+  const [selectedDrawIds, setSelectedDrawIds] = useState<string[]>(() => {
+    if (lastSelectedDrawId && activeDraws.some((draw) => draw.id === lastSelectedDrawId)) {
+      return [lastSelectedDrawId];
+    }
+    return activeDraws[0] ? [activeDraws[0].id] : [];
+  });
   const [isMultiMode, setIsMultiMode] = useState(false);
   const [isDrawListOpen, setIsDrawListOpen] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -194,9 +199,14 @@ export const SalesPanel: React.FC = () => {
     setSelectedDrawIds((prev) => {
       const filtered = prev.filter((id) => activeDrawIdSet.has(id));
       if (filtered.length > 0) return filtered;
+      if (lastSelectedDrawId && activeDrawIdSet.has(lastSelectedDrawId)) return [lastSelectedDrawId];
       return activeDraws[0] ? [activeDraws[0].id] : [];
     });
-  }, [activeDraws]);
+  }, [activeDraws, lastSelectedDrawId]);
+
+  React.useEffect(() => {
+    setLastSelectedDrawId(selectedDrawIds[0] || null);
+  }, [selectedDrawIds, setLastSelectedDrawId]);
 
   const selectedDraws = useMemo(
     () => sortDrawsByTime(activeDraws.filter((draw) => selectedDrawIds.includes(draw.id))),

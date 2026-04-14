@@ -16,6 +16,8 @@ export const SettlementPage: React.FC = () => {
     const { totalSales, totalCommission, totalPrizes, totalCapitalInjection, utility } = getGlobalStats();
     const fallbackRate = currentUser?.commission ?? useStore.getState().settings.commissionRate ?? 0.15;
     const effectiveRate = totalSales > 0 ? (totalCommission / totalSales) : fallbackRate;
+    const operatingUtility = Number((totalSales - totalCommission - totalPrizes).toFixed(2));
+    const liquidationBalance = Number((operatingUtility - totalCapitalInjection).toFixed(2));
 
     return {
       sales: totalSales,
@@ -23,9 +25,19 @@ export const SettlementPage: React.FC = () => {
       commission: totalCommission,
       injections: totalCapitalInjection,
       netProfit: utility, // utility is totalSales - totalCommission - totalPrizes + injections
+      operatingUtility,
+      liquidationBalance,
       commissionRate: Number((effectiveRate * 100).toFixed(2))
     };
   }, [getGlobalStats, currentUser?.commission]);
+
+  const isLiquidationPositive = stats.liquidationBalance >= 0;
+  const summaryCardClass = isLiquidationPositive
+    ? 'bg-emerald-600 rounded-2xl p-5 shadow-lg shadow-emerald-600/25 relative overflow-hidden'
+    : 'bg-rose-600 rounded-2xl p-5 shadow-lg shadow-rose-600/25 relative overflow-hidden';
+  const finalBlockClass = isLiquidationPositive
+    ? 'pt-4 border-t border-emerald-200/30 rounded-xl px-3 pb-3 bg-emerald-500/10'
+    : 'pt-4 border-t border-rose-200/30 rounded-xl px-3 pb-3 bg-rose-500/10';
 
   const handleExportSettlement = async () => {
     setIsExporting(true);
@@ -75,7 +87,8 @@ export const SettlementPage: React.FC = () => {
               prizes: stats.prizes,
               expenses: 0,
               commission: stats.commission,
-              netProfit: stats.netProfit
+              netProfit: stats.netProfit,
+              liquidationBalance: stats.liquidationBalance
             }}
           />
         </div>
@@ -83,7 +96,7 @@ export const SettlementPage: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 pb-24">
         {/* Header Card */}
-        <div className="bg-brand-primary rounded-2xl p-5 shadow-lg shadow-brand-primary/20 relative overflow-hidden">
+        <div className={summaryCardClass}>
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-1">
               <p className="text-white/60 text-[8px] font-black uppercase tracking-[0.2em]">Liquidación Total</p>
@@ -160,9 +173,16 @@ export const SettlementPage: React.FC = () => {
               <span className="text-xs font-bold text-slate-400">Comisión ({stats.commissionRate}%)</span>
               <span className="text-xs font-black text-blue-400">-${formatCurrency(stats.commission)}</span>
             </div>
-            <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+            <div className={finalBlockClass}>
+              <div className="flex justify-between items-center">
               <span className="text-sm font-black text-white uppercase tracking-tight">Utilidad Final</span>
-              <span className="text-lg font-black text-emerald-400">${formatCurrency(stats.netProfit)}</span>
+              <span className="text-lg font-black text-white">${formatCurrency(stats.netProfit)}</span>
+              </div>
+              <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-white/90">
+                {isLiquidationPositive
+                  ? `Saldo Casa Grande Positivo: la utilidad supera la inyección (+$${formatCurrency(stats.liquidationBalance)}).`
+                  : `Saldo Casa Grande Negativo: pérdida de $${formatCurrency(Math.abs(stats.liquidationBalance))}.`}
+              </p>
             </div>
           </div>
         </div>

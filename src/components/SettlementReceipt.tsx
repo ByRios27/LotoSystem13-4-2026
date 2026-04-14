@@ -14,6 +14,7 @@ interface SettlementReceiptProps {
     expenses: number;
     commission: number;
     netProfit: number;
+    liquidationBalance: number;
   };
 }
 
@@ -22,6 +23,9 @@ export const SettlementReceipt: React.FC<SettlementReceiptProps> = ({
   date, 
   stats 
 }) => {
+  const isLiquidationPositive = stats.liquidationBalance >= 0;
+  const netProfitPanelClass = isLiquidationPositive ? 'bg-emerald-700' : 'bg-rose-700';
+
   return (
     <div className="w-[600px] bg-white text-slate-900 p-10 font-sans flex flex-col gap-8">
       {/* Header */}
@@ -62,7 +66,15 @@ export const SettlementReceipt: React.FC<SettlementReceiptProps> = ({
             <Row label="Tu Comisión" value={stats.commission} />
             <tr className="font-black">
               <td className="p-3 text-sm text-slate-900">Utilidad Final (Casa Grande)</td>
-              <td className="p-3 text-sm text-right text-emerald-600">${formatCurrency(stats.netProfit)}</td>
+              <td className="p-3 text-sm text-right text-slate-900">${formatCurrency(stats.netProfit)}</td>
+            </tr>
+            <tr className="font-black">
+              <td className="p-3 text-sm text-slate-900">Estado de Liquidacion</td>
+              <td className="p-3 text-sm text-right text-slate-900">
+                {isLiquidationPositive
+                  ? `Saldo positivo (+$${formatCurrency(stats.liquidationBalance)})`
+                  : `Perdida de $${formatCurrency(Math.abs(stats.liquidationBalance))}`}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -75,7 +87,7 @@ export const SettlementReceipt: React.FC<SettlementReceiptProps> = ({
           <div className="bg-slate-50 p-3 text-center border-b border-slate-200">
             <p className="text-sm font-black text-slate-600 uppercase tracking-widest">Utilidad Final</p>
           </div>
-          <div className="bg-[#1e293b] p-6 text-center">
+          <div className={`${netProfitPanelClass} p-6 text-center`}>
             <p className="text-4xl font-black text-white">${formatCurrency(stats.netProfit)}</p>
           </div>
         </div>

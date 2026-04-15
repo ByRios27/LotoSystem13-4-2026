@@ -12,6 +12,20 @@ import { useStore, User, Draw, Ticket } from '../store/useStore';
 import { LogIn, Mail, Lock, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
 import { generateSellerId } from '../utils/helpers';
 
+function deferLowPriorityWork(task: () => void): () => void {
+  if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+    const id = (window as any).requestIdleCallback(() => task(), { timeout: 300 });
+    return () => {
+      if (typeof (window as any).cancelIdleCallback === 'function') {
+        (window as any).cancelIdleCallback(id);
+      }
+    };
+  }
+
+  const timeoutId = globalThis.setTimeout(task, 0);
+  return () => globalThis.clearTimeout(timeoutId);
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -129,6 +143,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentStoreUser) return;
 
     const unsubs: (() => void)[] = [];
+    let cancelPendingRecalc: (() => void) | null = null;
+    const queuePrizeRecalc = (ticketIds?: string[]) => {
+      if (cancelPendingRecalc) cancelPendingRecalc();
+      cancelPendingRecalc = deferLowPriorityWork(() => {
+        cancelPendingRecalc = null;
+        useStore.getState().recalculatePrizes(ticketIds);
+      });
+    };
+
     const state = useStore.getState();
     if (state.ticketsOwnerId && state.ticketsOwnerId !== currentStoreUser.id) {
       // Prevent showing another user's cached data while the new subscription initializes.
@@ -138,25 +161,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
 
-    unsubs.push(onSnapshot(collection(db, 'draws'), (snapshot) => {
+    unsubs.push(onSnapshot(collection(db, 'draws'), { includeMetadataChanges: true }, (snapshot) => {
+      const rawResultsSnapshot = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as any;
+        return {
+          id: docSnap.id,
+          results: data?.results || null,
+          updatedAt: data?.updatedAt || null,
+        };
+      });
       const draws = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Draw));
       const previousDraws = useStore.getState().draws;
-      const sameLength = previousDraws.length === draws.length;
-      const sameSignature =
-        sameLength &&
-        previousDraws.every((draw, index) => {
-          const next = draws[index];
+
+      const previousById = new Map(previousDraws.map((draw) => [draw.id, draw]));
+      const nextById = new Map(draws.map((draw) => [draw.id, draw]));
+      const sameIdSet =
+        previousById.size === nextById.size &&
+        Array.from(previousById.keys()).every((id) => nextById.has(id));
+      const resultsChanged =
+        !sameIdSet ||
+        Array.from(nextById.entries()).some(([id, nextDraw]) => {
+          const previous = previousById.get(id);
+          return (previous?.results?.join(',') || '') !== (nextDraw?.results?.join(',') || '');
+        });
+      const drawsChanged =
+        !sameIdSet ||
+        Array.from(nextById.entries()).some(([id, nextDraw]) => {
+          const previous = previousById.get(id);
           return (
-            draw.id === next?.id &&
-            draw.updatedAt === next?.updatedAt &&
-            (draw.results?.join(',') || '') === (next?.results?.join(',') || '')
+            previous?.updatedAt !== nextDraw?.updatedAt ||
+            previous?.drawTimeSort !== nextDraw?.drawTimeSort ||
+            previous?.closeTimeSort !== nextDraw?.closeTimeSort ||
+            previous?.isActive !== nextDraw?.isActive
           );
         });
 
-      if (!sameSignature) {
-        useStore.setState({ draws });
-        useStore.getState().recalculatePrizes();
+      // Always replace draws from snapshot to avoid stale/partial merges.
+      useStore.setState({ draws });
+      if (resultsChanged) {
+        queuePrizeRecalc();
       }
+
+      console.info('[LottoPro] draws_snapshot_received', {
+        buildId: __APP_BUILD_ID__,
+        fromCache: snapshot.metadata.fromCache,
+        hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        rawResultsSnapshot,
+        transformedDraws: draws.map((d) => ({
+          id: d.id,
+          results: d.results || null,
+          updatedAt: d.updatedAt || null,
+        })),
+        effectiveUpdatedAt: Date.now(),
+      });
     }, (err) => console.error('Draws subscription error:', err)));
 
     let q: Query<DocumentData>;
@@ -236,7 +293,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (changedTicketIds.length > 0 || isInitialLoad) {
-        useStore.getState().recalculatePrizes(isInitialLoad ? undefined : changedTicketIds);
+        const hasResolvedDraws = useStore.getState().draws.some(
+          (draw) => !!draw.results && draw.results.length === 3
+        );
+        if (!hasResolvedDraws) return;
+
+        if (isInitialLoad || changedTicketIds.length > 150) {
+          queuePrizeRecalc(isInitialLoad ? undefined : changedTicketIds);
+        } else {
+          useStore.getState().recalculatePrizes(changedTicketIds);
+        }
       }
     }, (err) => {
       console.error('Tickets subscription error:', err);
@@ -279,7 +345,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (snapshot.exists()) updateSettings(snapshot.data() as any);
     }, (err) => console.error('General settings error:', err)));
 
-    return () => unsubs.forEach(unsub => unsub());
+    return () => {
+      unsubs.forEach(unsub => unsub());
+      if (cancelPendingRecalc) cancelPendingRecalc();
+    };
   }, [currentStoreUser?.id, currentStoreUser?.role, updateSettings]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {

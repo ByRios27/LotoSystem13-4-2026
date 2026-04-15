@@ -19,19 +19,25 @@ export function calculateEntryPrize(entry: Entry, draw: Draw, settings: AppSetti
     const chancePayouts = settings.chance?.payouts || { first: 60, second: 8, third: 4 };
     const playedNum = entry.number.slice(-2); // Chance is always 2 digits
 
-    if (playedNum === win1) {
-      prize = entry.pieces * chancePayouts.first;
-      winningPosition = '1er';
-    } else if (playedNum === win2) {
-      prize = entry.pieces * chancePayouts.second;
-      winningPosition = '2do';
-    } else if (playedNum === win3) {
-      prize = entry.pieces * chancePayouts.third;
-      winningPosition = '3er';
-    }
+    const chanceMatches: Array<{ result: string; payout: number; position: '1er' | '2do' | '3er' }> = [
+      { result: win1, payout: chancePayouts.first, position: '1er' },
+      { result: win2, payout: chancePayouts.second, position: '2do' },
+      { result: win3, payout: chancePayouts.third, position: '3er' },
+    ];
+
+    chanceMatches.forEach(({ result, payout, position }) => {
+      if (playedNum === result) {
+        // If the same number appears multiple times in the draw, each hit pays.
+        prize += entry.pieces * payout;
+        if (!winningPosition) winningPosition = position;
+      }
+    });
   } else if (entry.type === 'PALÉ') {
-    const n1 = entry.number.substring(0, 2);
-    const n2 = entry.number.substring(2, 4);
+    const paleParts = getPaleParts(entry.number);
+    if (!paleParts) {
+      return { prize: 0 };
+    }
+    const [n1, n2] = paleParts;
     
     const has1 = n1 === win1 || n2 === win1;
     const has2 = n1 === win2 || n2 === win2;
@@ -87,3 +93,4 @@ export function calculateEntryPrize(entry: Entry, draw: Draw, settings: AppSetti
 
   return { prize, winningPosition };
 }
+

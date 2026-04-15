@@ -1,10 +1,13 @@
 ﻿const { onSchedule } = require('firebase-functions/v2/scheduler');
 const logger = require('firebase-functions/logger');
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
 
 admin.initializeApp();
 
-const db = admin.firestore();
+const FIRESTORE_DATABASE_ID =
+  process.env.FIRESTORE_DATABASE_ID || 'ai-studio-b68afee4-767e-4cf1-ac1d-ac2882307f85';
+const db = getFirestore(admin.app(), FIRESTORE_DATABASE_ID);
 const FieldValue = admin.firestore.FieldValue;
 const Timestamp = admin.firestore.Timestamp;
 
@@ -346,6 +349,7 @@ exports.dailyArchiveAndReset = onSchedule(
       logger.info('Daily archive and reset completed.', {
         businessDate,
         archivedTickets: totalTickets,
+        firestoreDatabaseId: FIRESTORE_DATABASE_ID,
       });
     } catch (error) {
       const finishedAt = Timestamp.now();

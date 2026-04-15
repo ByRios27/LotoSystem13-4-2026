@@ -51,7 +51,7 @@ export const SettingsPage: React.FC = () => {
     setIsArchiving(true);
     try {
       await archiveTickets();
-      alert('Ventas archivadas y sistema reiniciado.');
+      alert('Resumen diario archivado correctamente.');
     } catch (error) {
       alert('Error al archivar.');
     } finally {
@@ -205,7 +205,7 @@ export const SettingsPage: React.FC = () => {
                       </div>
                       <div className="text-left">
                         <p className="text-sm font-black">Archivar Ventas del Día</p>
-                        <p className="text-[9px] font-bold opacity-70">Guarda histórico y limpia el sistema</p>
+                        <p className="text-[9px] font-bold opacity-70">Guarda resumen del dia sin borrar ventas</p>
                       </div>
                     </button>
 
@@ -254,8 +254,12 @@ export const SettingsPage: React.FC = () => {
         title={pinAction === 'reset' ? 'Borrar Datos' : 'Archivar Ventas'}
         description={pinAction === 'reset' 
           ? 'Confirma tu PIN para eliminar todos los datos de ventas.' 
-          : 'Confirma tu PIN para archivar las ventas y reiniciar el sistema.'}
+          : 'Confirma tu PIN para archivar el resumen diario sin borrar datos de ventas.'}
       />
     </div>
   );
 };
+
+
+
+

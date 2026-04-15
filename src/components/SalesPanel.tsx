@@ -1,6 +1,6 @@
 ﻿import React, { useState, useMemo, useRef } from 'react';
 import { useStore, Entry, Ticket } from '../store/useStore';
-import { cn, formatAMPM, generateId, sortDrawsByTime, getCurrentTimeMinutes, normalizePale, toCents, fromCents, formatCurrency, getDrawStatus, formatPlayNumberForDisplay, getCustomerDisplayName } from '../utils/helpers';
+import { cn, formatAMPM, generateId, getCurrentTimeMinutes, normalizePale, toCents, fromCents, formatCurrency, getDrawStatus, formatPlayNumberForDisplay, getCustomerDisplayName } from '../utils/helpers';
 import { 
   Menu, 
   LogOut, 
@@ -43,6 +43,23 @@ export const SalesPanel: React.FC = () => {
     lastSelectedDrawId,
     setLastSelectedDrawId,
   } = useStore();
+
+  const getOperationalSortMinutes = (draw: { closeTimeSort?: number; drawTimeSort?: number; drawTime?: string }) => {
+    if (typeof draw.closeTimeSort === 'number') return draw.closeTimeSort;
+    if (typeof draw.drawTimeSort === 'number') return draw.drawTimeSort;
+    if (draw.drawTime) {
+      const [h, m] = draw.drawTime.split(':').map(Number);
+      if (Number.isFinite(h) && Number.isFinite(m)) return h * 60 + m;
+    }
+    return Number.MAX_SAFE_INTEGER;
+  };
+
+  const sortDrawsOperationally = <T extends { name?: string; closeTimeSort?: number; drawTimeSort?: number; drawTime?: string }>(items: T[]) =>
+    [...items].sort((a, b) => {
+      const diff = getOperationalSortMinutes(a) - getOperationalSortMinutes(b);
+      if (diff !== 0) return diff;
+      return (a.name || '').localeCompare(b.name || '');
+    });
   
   // Sort active draws by time and filter by closing time
   const activeDraws = useMemo(() => {
@@ -50,7 +67,7 @@ export const SalesPanel: React.FC = () => {
     // Hide all draws before 12:05 AM of the next day
     if (now < 5) return [];
     
-    return sortDrawsByTime(draws.filter(d => 
+    return sortDrawsOperationally(draws.filter(d => 
       d.isActive && 
       getDrawStatus(d) === 'open'
     ));
@@ -209,7 +226,7 @@ export const SalesPanel: React.FC = () => {
   }, [selectedDrawIds, setLastSelectedDrawId]);
 
   const selectedDraws = useMemo(
-    () => sortDrawsByTime(activeDraws.filter((draw) => selectedDrawIds.includes(draw.id))),
+    () => sortDrawsOperationally(activeDraws.filter((draw) => selectedDrawIds.includes(draw.id))),
     [activeDraws, selectedDrawIds]
   );
 
@@ -513,7 +530,7 @@ export const SalesPanel: React.FC = () => {
   };
 
   const previewGroups = useMemo(() => {
-    return sortDrawsByTime(
+    return sortDrawsOperationally(
       draws.filter((draw) => (drawEntryMap[draw.id] || []).length > 0)
     ).map((draw) => {
       const groupEntries = drawEntryMap[draw.id] || [];

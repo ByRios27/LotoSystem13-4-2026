@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { releaseTicketLimits } from '../services/betService';
 import { db, auth } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocFromCache, getDocFromServer, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocFromCache, getDocFromServer, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { calculateEntryPrize } from '../utils/prizeCalculator';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { generateSellerId } from '../utils/helpers';
@@ -177,8 +177,8 @@ interface AppState {
   setEditingTicket: (ticket: Ticket | null) => void;
   
   // Results Actions
-  setResults: (drawId: string, results: string[]) => void;
-  removeResults: (drawId: string) => void;
+  setResults: (drawId: string, results: string[]) => Promise<void>;
+  removeResults: (drawId: string) => Promise<void>;
   recalculatePrizes: (ticketIds?: string[]) => void;
   resetSalesData: () => Promise<void>;
   archiveTickets: () => Promise<void>;
@@ -467,21 +467,37 @@ export const useStore = create<AppState>()(
       setCurrentPage: (page) => set({ currentPage: page }),
       setLastSelectedDrawId: (drawId) => set({ lastSelectedDrawId: drawId }),
 
-      setResults: (drawId, results) => {
+      setResults: async (drawId, results) => {
+        if (!auth.currentUser) {
+          throw new Error('No authenticated user');
+        }
+
+        try {
+          await updateDoc(doc(db, 'draws', drawId), { results });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `draws/${drawId}`);
+        }
+
         set((state) => {
-          const updatedDraws = state.draws.map(d => d.id === drawId ? { ...d, results } : d);
+          const updatedDraws = state.draws.map((d) => (d.id === drawId ? { ...d, results } : d));
           return { draws: updatedDraws };
         });
-        if (auth.currentUser) {
-          updateDoc(doc(db, 'draws', drawId), { results }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `draws/${drawId}`));
-        }
-        // Recalculate prizes after setting results
         get().recalculatePrizes();
       },
 
-      removeResults: (drawId) => {
+      removeResults: async (drawId) => {
+        if (!auth.currentUser) {
+          throw new Error('No authenticated user');
+        }
+
+        try {
+          await updateDoc(doc(db, 'draws', drawId), { results: deleteField() });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `draws/${drawId}`);
+        }
+
         set((state) => {
-          const updatedDraws = state.draws.map(d => {
+          const updatedDraws = state.draws.map((d) => {
             if (d.id === drawId) {
               const { results, ...rest } = d;
               return rest;
@@ -490,10 +506,6 @@ export const useStore = create<AppState>()(
           });
           return { draws: updatedDraws };
         });
-        if (auth.currentUser) {
-          updateDoc(doc(db, 'draws', drawId), { results: deleteField() }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `draws/${drawId}`));
-        }
-        // Recalculate prizes after removing results
         get().recalculatePrizes();
       },
 
@@ -618,22 +630,44 @@ export const useStore = create<AppState>()(
         if (!auth.currentUser) return;
         
         try {
-          const { tickets } = get();
-          if (tickets.length === 0) return;
+          const { tickets, users, currentUser } = get();
 
-          const archiveId = `archive_${new Date().toISOString().split('T')[0]}_${Date.now()}`;
-          const archiveData = {
-            id: archiveId,
-            timestamp: Date.now(),
-            tickets: tickets,
-            totalSales: tickets.reduce((sum, t) => sum + t.total, 0),
-            totalPrizes: tickets.reduce((sum, t) => sum + (t.totalPrize || 0), 0)
+          const businessDate = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Panama',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date());
+
+          const totalSales = tickets.reduce((sum, t) => sum + (t.total || 0), 0);
+          const totalCommission = Number(
+            tickets.reduce((sum, t) => sum + (t.commission || 0), 0).toFixed(2)
+          );
+          const totalPrizes = tickets.reduce((sum, t) => sum + (t.totalPrize || 0), 0);
+          const totalCapitalInjection = users.reduce((sum, u) => sum + (u.capitalInjection || 0), 0);
+          const totalUtility = Number(
+            (totalSales - totalCommission - totalPrizes + totalCapitalInjection).toFixed(2)
+          );
+
+          const summaryDoc = {
+            businessDate,
+            timezone: 'America/Panama',
+            sourceVersion: 'manual-v2',
+            manualArchive: true,
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.id || auth.currentUser.uid,
+            totals: {
+              totalSales,
+              totalCommission,
+              totalPrizes,
+              totalUtility,
+              totalCapitalInjection,
+              totalTickets: tickets.length,
+            },
           };
 
-          await setDoc(doc(db, 'archives', archiveId), archiveData);
-          
-          // After archiving, we might want to reset the current day's data
-          await get().resetSalesData();
+          // Same-day archive is overwritten with the latest saved snapshot.
+          await setDoc(doc(db, 'archivesDaily', businessDate), summaryDoc, { merge: true });
         } catch (error) {
           console.error('Error archiving tickets:', error);
           throw error;
@@ -709,3 +743,4 @@ export const useStore = create<AppState>()(
     }
   )
 );
+

@@ -66,21 +66,31 @@ export const ResultsPage: React.FC = () => {
     }
   }, [selectedDraw]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedDrawId) return;
     if (r1.length !== resultDigits || r2.length !== resultDigits || r3.length !== resultDigits) return;
-    
-    setResults(selectedDrawId, [r1, r2, r3]);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 2000);
+
+    try {
+      await setResults(selectedDrawId, [r1, r2, r3]);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
+    } catch (error) {
+      console.error('Error saving draw results:', error);
+      alert('No se pudo guardar el resultado en Firestore. Verifica permisos y conexion.');
+    }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!selectedDrawId) return;
-    removeResults(selectedDrawId);
-    setR1('');
-    setR2('');
-    setR3('');
+    try {
+      await removeResults(selectedDrawId);
+      setR1('');
+      setR2('');
+      setR3('');
+    } catch (error) {
+      console.error('Error removing draw results:', error);
+      alert('No se pudieron eliminar los resultados en Firestore.');
+    }
   };
 
   // Grid Data Calculation

@@ -52,7 +52,11 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
           if (e.prize && e.prize > 0) {
             prizesByNumber[num] = (prizesByNumber[num] || 0) + e.prize;
           }
-        } else if (e.type === 'PALÃ‰') {
+        } else if (
+          e.type === 'PALÉ' ||
+          e.type === 'PAL\u00C3\u2030' ||
+          e.type === 'PAL\u00C3\u0192\u00E2\u20AC\u00B0'
+        ) {
           // Add to both numbers in the grid
           const n1 = e.number.substring(0, 2);
           const n2 = e.number.substring(2, 4);

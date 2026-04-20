@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useStore, User, UserRole } from '../../store/useStore';
 import { Plus, Edit2, Trash2, User as UserIcon, Shield, Percent, ToggleLeft, ToggleRight, AlertCircle, TrendingUp } from 'lucide-react';
 import { cn, generateSellerId } from '../../utils/helpers';
@@ -65,7 +65,7 @@ export const UsersSettingsSection: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between px-2">
         <div>
-          <h2 className="text-sm font-black text-white uppercase tracking-widest">GestiÃ³n de Usuarios</h2>
+          <h2 className="text-sm font-black text-white uppercase tracking-widest">Gestión de Usuarios</h2>
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Administra roles y comisiones</p>
         </div>
         <PermissionGuard allowedRoles={['CEO']}>
@@ -83,7 +83,7 @@ export const UsersSettingsSection: React.FC = () => {
         <div className="bg-[#121A2B] rounded-2xl border border-brand-primary/20 p-4 space-y-3 mx-2">
           <div className="flex items-center gap-2 mb-1">
             <TrendingUp size={14} className="text-brand-primary" />
-            <h3 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">I. Capital (InyecciÃ³n)</h3>
+            <h3 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">I. Capital (Inyección)</h3>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <select 
@@ -94,7 +94,7 @@ export const UsersSettingsSection: React.FC = () => {
               <option value="">Seleccionar Usuario</option>
               {allSelectableUsers.map(u => (
                 <option key={u.id} value={u.id}>
-                  {u.name} (@{u.username}) {u.id === currentUser?.id ? '(MÃ­ mismo)' : ''}
+                  {u.name} (@{u.username}) {u.id === currentUser?.id ? '(Mí mismo)' : ''}
                 </option>
               ))}
             </select>
@@ -111,7 +111,7 @@ export const UsersSettingsSection: React.FC = () => {
             disabled={!selectedUserId || !injectionAmount}
             className="w-full py-2.5 bg-brand-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
           >
-            Guardar InyecciÃ³n
+            Guardar Inyección
           </button>
         </div>
       </PermissionGuard>

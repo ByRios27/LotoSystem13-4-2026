@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useStore, Entry, Ticket } from '../store/useStore';
 import { cn, formatAMPM, generateId, getCurrentTimeMinutes, normalizePale, toCents, fromCents, formatCurrency, getDrawStatus, formatPlayNumberForDisplay, getCustomerDisplayName } from '../utils/helpers';
 import { 
@@ -420,7 +420,7 @@ export const SalesPanel: React.FC = () => {
       
       const units = parseInt(amountInput, 10);
       if (isNaN(units) || units <= 0) {
-        alert('Ingrese una cantidad vÃ¡lida de piezas.');
+        alert('Ingrese una cantidad válida de piezas.');
         return;
       }
 
@@ -1057,7 +1057,3 @@ export const SalesPanel: React.FC = () => {
     </div>
   );
 };
-
-
-
-

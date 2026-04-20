@@ -60,7 +60,11 @@ export function getPaleParts(number: string): [string, string] | null {
 export function formatPlayNumberForDisplay(number: string, type?: string): string {
   if (!number) return '';
   const normalizedType = (type || '').toUpperCase();
-  const isPaleType = normalizedType === 'PALÉ' || normalizedType === 'PALÃ‰' || normalizedType === 'PALE';
+  const isPaleType =
+    normalizedType === 'PALÉ' ||
+    normalizedType === 'PALE' ||
+    normalizedType === 'PAL\u00C3\u2030' ||
+    normalizedType === 'PAL\u00C3\u0192\u00E2\u20AC\u00B0';
   if (!isPaleType) return number;
 
   const paleParts = getPaleParts(number);

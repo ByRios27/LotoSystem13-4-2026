@@ -78,13 +78,7 @@ export const ReuseDrawSelectionModal: React.FC<ReuseDrawSelectionModalProps> = (
                             : "bg-white/5 border-transparent hover:bg-white/10"
                         )}
                     >
-                        <div className="flex items-center gap-3.5">
-                        <div className={cn(
-                            "w-9 h-9 rounded-lg flex items-center justify-center text-xs font-black transition-all",
-                            selectedIds.includes(draw.id) ? "bg-brand-primary text-white" : "bg-white/10 text-slate-300"
-                        )}>
-                            {draw.digitsMode}D
-                        </div>
+                        <div className="flex min-w-0 flex-1 items-center">
                         <div className="text-left">
                             <p className={cn(
                             "text-sm font-bold tracking-tight leading-none",

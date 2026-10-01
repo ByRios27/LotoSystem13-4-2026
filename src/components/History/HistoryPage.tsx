@@ -240,7 +240,7 @@ export const HistoryPage: React.FC = () => {
           }}
         />
 
-        <div className="space-y-0.5">
+        <div className="mt-2 space-y-0.5">
           <AnimatePresence mode="popLayout">
             {drawHistoryStable.length > 0 ? (
               drawHistoryStable.map((draw) => {

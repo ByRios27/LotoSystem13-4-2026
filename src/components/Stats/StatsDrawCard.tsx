@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { StatsResultsHeader } from './StatsResultsHeader';
 import { StatsNumberGrid } from './StatsNumberGrid';
 import { StatsCombinationsSection } from './StatsCombinationsSection';
+import { TicketsForNumberModal } from '../Sales/TicketsForNumberModal';
 
 interface DrawStatsProps {
   draw: Draw;
@@ -15,6 +16,7 @@ interface DrawStatsProps {
 
 export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedCombination, setSelectedCombination] = useState<Entry | null>(null);
 
   const { settings } = useStore();
   const stats = useMemo(() => {
@@ -48,11 +50,6 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
             prizesByNumber[num] = (prizesByNumber[num] || 0) + e.prize;
           }
         } else if (e.type === 'PALÉ') {
-          const n1 = e.number.substring(0, 2);
-          const n2 = e.number.substring(2, 4);
-          salesByNumber[n1] = (salesByNumber[n1] || 0) + pieces;
-          salesByNumber[n2] = (salesByNumber[n2] || 0) + pieces;
-
           const key = `${e.type}-${e.number}`;
           if (combinationsMap[key]) {
             combinationsMap[key].amount = Number((combinationsMap[key].amount + amountForDraw).toFixed(2));
@@ -65,9 +62,6 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
             (combinationsMap[key] as any).quantity = pieces;
           }
         } else if (e.type === 'BILLETE') {
-          const num = e.number.slice(-2);
-          salesByNumber[num] = (salesByNumber[num] || 0) + pieces;
-
           const key = `${e.type}-${e.number}`;
           if (combinationsMap[key]) {
             combinationsMap[key].amount = Number((combinationsMap[key].amount + amountForDraw).toFixed(2));
@@ -104,48 +98,37 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
     <div className={cn(
       "rounded-[1.2rem] border transition-all duration-300 overflow-hidden mb-3",
       stats.isLoss
-        ? "bg-[#1A1212] border-red-500/30"
+        ? "bg-red-700 border-red-400"
         : stats.isWinnerDraw
           ? "bg-[#0E1B14] border-green-500/30"
           : "bg-[#121A2B] border-[#1E293B]",
       isExpanded && !stats.isLoss && !stats.isWinnerDraw ? "border-brand-primary/30 shadow-[0_0_20px_rgba(22,163,74,0.1)]" : "",
       isExpanded && stats.isWinnerDraw ? "border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.15)]" : "",
-      isExpanded && stats.isLoss ? "border-red-500/50 shadow-[0_0_20px_rgba(220,38,38,0.15)]" : ""
+      isExpanded && stats.isLoss ? "border-red-300 shadow-[0_0_20px_rgba(220,38,38,0.3)]" : ""
     )}>
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
           "p-3 flex items-center justify-between transition-colors cursor-pointer",
-          stats.isLoss ? "active:bg-red-500/10" : stats.isWinnerDraw ? "active:bg-green-500/10" : "active:bg-white/5"
+          stats.isLoss ? "active:bg-red-800" : stats.isWinnerDraw ? "active:bg-green-500/10" : "active:bg-white/5"
         )}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
-            className={stats.isLoss ? "text-red-400" : stats.isWinnerDraw ? "text-green-400" : "text-slate-500"}
+            className={stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-400" : "text-slate-500"}
           >
             <ChevronDown size={18} />
           </motion.div>
           
-          <div className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center",
-            stats.isLoss
-              ? "bg-red-500/20 text-red-400"
-              : stats.isWinnerDraw
-                ? "bg-green-500/20 text-green-400"
-                : "bg-brand-primary/10 text-brand-primary"
-          )}>
-            <span className="text-[10px] font-black">{draw.digitsMode}D</span>
-          </div>
-          
-          <div className="ml-1">
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h4 className={cn("font-black text-[13px] tracking-tight leading-none", stats.isLoss ? "text-red-100" : stats.isWinnerDraw ? "text-green-100" : "text-white")}>{draw.name}</h4>
-              {getDrawStatus(draw) === 'closed' && <Lock size={10} className={stats.isLoss ? "text-red-500/50" : stats.isWinnerDraw ? "text-green-500/60" : "text-slate-600"} />}
+              {getDrawStatus(draw) === 'closed' && <Lock size={10} className={stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-500/60" : "text-slate-600"} />}
             </div>
             <p className={cn(
               "text-[9px] font-bold uppercase tracking-widest mt-1.5",
-              stats.isLoss ? "text-red-400/60" : stats.isWinnerDraw ? "text-green-400/70" : "text-slate-500"
+              stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-400/70" : "text-slate-500"
             )}>
               {formatAMPM(draw.drawTime)}
             </p>
@@ -154,11 +137,11 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
 
         <div className={cn(
           "px-4 py-2 rounded-xl border shadow-inner text-center min-w-[80px]",
-          stats.isLoss ? "bg-red-500/10 border-red-500/20" : stats.isWinnerDraw ? "bg-green-500/10 border-green-500/20" : "bg-[#0B1220] border-white/5"
+          stats.isLoss ? "bg-red-900 border-red-300" : stats.isWinnerDraw ? "bg-green-500/10 border-green-500/20" : "bg-[#0B1220] border-white/5"
         )}>
           <span className={cn(
             "text-[8px] font-black uppercase tracking-widest block mb-0.5",
-            stats.isLoss ? "text-red-400" : stats.isWinnerDraw ? "text-green-400" : "text-slate-500"
+            stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-400" : "text-slate-500"
           )}>FRACCIONES</span>
           <p className={cn("text-sm font-black leading-none tracking-tight", stats.isLoss ? "text-red-100" : stats.isWinnerDraw ? "text-green-100" : "text-white")}>
             {Number.isInteger(stats.totalFractions) ? stats.totalFractions : stats.totalFractions.toFixed(2)}
@@ -176,7 +159,7 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
           >
             <div className={cn(
               "px-3 pb-6",
-              stats.isLoss ? "bg-black/40" : stats.isWinnerDraw ? "bg-green-950/20" : "bg-black/20"
+              stats.isLoss ? "bg-red-800" : stats.isWinnerDraw ? "bg-green-950/20" : "bg-black/20"
             )}>
               <div className="h-[1px] w-full bg-white/5 mb-4" />
               
@@ -188,26 +171,35 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
                 results={draw.results}
               />
 
-              <div className="flex items-center justify-center gap-4 mt-4 opacity-40">
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-4 px-1">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-white/10" />
-                  <span className="text-[7px] font-black uppercase tracking-widest">Sin Ventas</span>
+                  <div className="w-3 h-3 rounded-sm border border-white/15 bg-white/10" />
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-200">Sin ventas</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-brand-primary/20" />
-                  <span className="text-[7px] font-black uppercase tracking-widest">Bajo</span>
+                  <div className="w-3 h-3 rounded-sm border border-emerald-300/30" style={{ backgroundColor: 'rgba(22, 163, 74, 0.35)' }} />
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-200">Venta baja</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-brand-primary/60" />
-                  <span className="text-[7px] font-black uppercase tracking-widest">Alto</span>
+                  <div className="w-3 h-3 rounded-sm border border-emerald-200/50" style={{ backgroundColor: 'rgba(22, 163, 74, 0.9)' }} />
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-200">Venta alta</span>
                 </div>
               </div>
 
-              <StatsCombinationsSection combinations={stats.combinations} />
+              <StatsCombinationsSection combinations={stats.combinations} onSelect={setSelectedCombination} />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {selectedCombination && (
+        <TicketsForNumberModal
+          drawId={draw.id}
+          number={selectedCombination.number}
+          entryType={selectedCombination.type}
+          onClose={() => setSelectedCombination(null)}
+        />
+      )}
     </div>
   );
 };

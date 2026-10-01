@@ -32,7 +32,7 @@ export const StatsNumberGrid: React.FC<NumberGridProps> = ({
 
   return (
     <>
-      <div className="grid grid-cols-10 gap-1.5 p-2 bg-black/20 rounded-2xl border border-white/5 shadow-inner">
+      <div className="mx-auto grid w-full max-w-[310px] grid-cols-10 gap-0.5 p-1 bg-black/20 rounded-lg border border-white/5 shadow-inner">
         {numbers.map((num) => {
           const amount = salesByNumber[num] || 0;
           const isWinner = results?.includes(num);

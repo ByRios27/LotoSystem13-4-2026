@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { Ticket as TicketType, useStore } from '../../store/useStore';
+import { Entry, Ticket as TicketType, useStore } from '../../store/useStore';
 import { X, Receipt } from 'lucide-react';
-import { formatCurrency, getCustomerDisplayName } from '../../utils/helpers';
+import { formatCurrency, formatPlayNumberForDisplay, getCustomerDisplayName, normalizePale } from '../../utils/helpers';
 import { normalizeTicketDrawEntries } from '../../utils/ticketUtils';
 import { TicketModal } from '../TicketModal';
 
 interface TicketsForNumberModalProps {
   drawId: string;
   number: string;
+  entryType?: Entry['type'];
   onClose: () => void;
 }
 
@@ -17,7 +18,7 @@ interface TicketInfo {
   totalPieces: number;
 }
 
-export const TicketsForNumberModal: React.FC<TicketsForNumberModalProps> = ({ drawId, number, onClose }) => {
+export const TicketsForNumberModal: React.FC<TicketsForNumberModalProps> = ({ drawId, number, entryType, onClose }) => {
   const tickets = useStore(state => state.tickets);
   const draws = useStore(state => state.draws);
   const [ticketToShow, setTicketToShow] = useState<TicketType | null>(null);
@@ -32,6 +33,14 @@ export const TicketsForNumberModal: React.FC<TicketsForNumberModalProps> = ({ dr
         .filter(group => group.drawId === drawId)
         .flatMap(group => group.entries)
         .filter(entry => {
+          if (entryType) {
+            if (entry.type !== entryType) return false;
+            if (entryType === 'PALÉ') return normalizePale(entry.number) === normalizePale(number);
+            if (entryType === 'BILLETE') return entry.number === number;
+            const chanceNumber = entry.number.length === 4 ? entry.number.slice(-2) : entry.number;
+            return chanceNumber === number;
+          }
+
             if (entry.type === 'CHANCE') {
                 const num = entry.number.length === 4 ? entry.number.slice(-2) : entry.number;
                 return num === number;
@@ -77,13 +86,17 @@ export const TicketsForNumberModal: React.FC<TicketsForNumberModalProps> = ({ dr
           <div className="flex items-center justify-between p-4 border-b border-white/10">
             <div className='flex items-center gap-3'>
               <div className="w-12 h-12 bg-brand-primary/10 border border-brand-primary/20 text-brand-primary rounded-xl flex items-center justify-center">
-                <span className="text-2xl font-black">{number}</span>
+                <span className="text-xl font-black">{formatPlayNumberForDisplay(number, entryType)}</span>
               </div>
               <div>
                 <h2 className="text-lg font-bold text-white leading-tight">
                   Detalle de Ventas
                 </h2>
-                <p className="text-xs text-slate-400">Clientes que compraron el {number}</p>
+                <p className="text-xs text-slate-400">
+                  {entryType
+                    ? `Tickets con jugada ${entryType}`
+                    : `Clientes que compraron el ${number}`}
+                </p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">

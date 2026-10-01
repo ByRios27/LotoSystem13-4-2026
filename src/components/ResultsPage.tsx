@@ -23,7 +23,7 @@ import { PullToRefresh } from './PullToRefresh';
 import { calculateTicketPayoutForDraw, calculateTicketSalesForDraw, getEntriesForDraw } from '../utils/ticketUtils';
 
 export const ResultsPage: React.FC = () => {
-  const { draws, setResults, removeResults, tickets, currentUser } = useStore();
+  const { draws, setResults, removeResults, tickets, currentUser, settings } = useStore();
   
   const [selectedDrawId, setSelectedDrawId] = useState<string | null>(null);
   const [isDrawListOpen, setIsDrawListOpen] = useState(false);
@@ -45,6 +45,15 @@ export const ResultsPage: React.FC = () => {
     });
     return sortDrawsByScheduleDescending(visibleDraws);
   }, [draws, tickets]);
+
+  const drawFinancials = useMemo(() => new Map(draws.map((draw) => {
+    const drawTickets = tickets.filter((ticket) => ticket.drawIds?.includes(draw.id));
+    const totalSales = drawTickets.reduce((sum, ticket) => sum + calculateTicketSalesForDraw(ticket, draw.id), 0);
+    const totalPrizes = draw.results?.length === 3
+      ? drawTickets.reduce((sum, ticket) => sum + calculateTicketPayoutForDraw(ticket, draw, settings), 0)
+      : 0;
+    return [draw.id, { totalSales, totalPrizes }];
+  })), [draws, tickets, settings]);
 
   const drawsPendingResults = useMemo(
     () => sortDrawsChronologically(draws.filter((draw) => draw.isActive && !(draw.results && draw.results.length > 0))),
@@ -266,43 +275,51 @@ export const ResultsPage: React.FC = () => {
               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Sorteos de Hoy</h3>
             </div>
             <div className="space-y-1.5">
-              {filteredDraws.map((draw) => (
-                <div 
+              {filteredDraws.map((draw) => {
+                const financials = drawFinancials.get(draw.id);
+                const prizesExceedSales = !!financials && financials.totalPrizes > financials.totalSales;
+
+                return <div 
                   key={draw.id} 
                   className={cn(
-                    "bg-[#121A2B] p-3 rounded-xl border transition-all flex items-center justify-between shadow-md group relative",
-                    selectedDrawId === draw.id ? "border-brand-primary/40 ring-1 ring-brand-primary/20" : "border-white/5"
+                    "p-3 rounded-xl border transition-all flex items-center justify-between gap-2 shadow-md group relative",
+                    prizesExceedSales
+                      ? "bg-red-700 border-red-400 shadow-red-950/40"
+                      : selectedDrawId === draw.id ? "bg-[#121A2B] border-brand-primary/40 ring-1 ring-brand-primary/20" : "bg-[#121A2B] border-white/5"
                   )}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center",
-                      draw.results?.length ? "bg-brand-primary/20 text-brand-primary" : "bg-white/10 text-slate-500"
+                      "w-8 h-8 shrink-0 rounded-lg flex items-center justify-center",
+                      prizesExceedSales ? "bg-red-900 text-white" : draw.results?.length ? "bg-brand-primary/20 text-brand-primary" : "bg-white/10 text-slate-500"
                     )}>
                       <Clock size={16} />
                     </div>
-                    <div>
-                      <p className="text-xs font-black text-white">{draw.name}</p>
-                      <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">{formatAMPM(draw.drawTime)}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate whitespace-nowrap text-xs font-black text-white leading-tight" title={draw.name}>{draw.name}</p>
+                      <p className={cn("text-[9px] font-bold uppercase tracking-wide mt-0.5", prizesExceedSales ? "text-white" : "text-slate-400")}>{formatAMPM(draw.drawTime)}</p>
+                      {draw.results?.length === 3 && (financials?.totalPrizes || 0) > 0 && (
+                        <p className="mt-0.5 text-[9px] font-black text-yellow-200">
+                          Premios ${formatCurrency(financials?.totalPrizes || 0)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   
                   {draw.results && draw.results.length > 0 ? (
-                    <div className="flex items-center gap-2">
-                      <div className="grid grid-cols-3 gap-1">
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="grid grid-cols-3 gap-1.5">
                       {draw.results.map((r, i) => (
                         <div key={i} className={cn(
-                          "w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black border",
-                          i === 0 ? "bg-yellow-400/20 text-yellow-400 border-yellow-400/30" :
-                          i === 1 ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
-                          "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                          "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border",
+                          "bg-white text-slate-900 border-white"
                         )}>
                           {r}
                         </div>
                       ))}
                       </div>
                       {isCEO && (
-                        <div className="flex gap-1">
+                        <div className="flex shrink-0 gap-1.5">
                           <button
                             aria-label={`Editar resultados de ${draw.name}`}
                             title="Editar resultados"
@@ -310,7 +327,7 @@ export const ResultsPage: React.FC = () => {
                               setSelectedDrawId(draw.id);
                               setIsResultEditorOpen(true);
                             }}
-                            className="w-8 h-8 rounded-lg bg-white/5 text-slate-300 hover:text-white flex items-center justify-center"
+                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center", prizesExceedSales ? "bg-white text-slate-900 hover:bg-slate-100" : "bg-white/5 text-slate-300 hover:text-white")}
                           >
                             <Edit2 size={14} />
                           </button>
@@ -321,7 +338,7 @@ export const ResultsPage: React.FC = () => {
                               setSelectedDrawId(draw.id);
                               setIsPinModalOpen(true);
                             }}
-                            className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 flex items-center justify-center"
+                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center", prizesExceedSales ? "bg-red-950 text-white hover:bg-red-900" : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20")}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -332,7 +349,7 @@ export const ResultsPage: React.FC = () => {
                     <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Pendiente</span>
                   )}
                 </div>
-              ))}
+              })}
             </div>
           </div>
 

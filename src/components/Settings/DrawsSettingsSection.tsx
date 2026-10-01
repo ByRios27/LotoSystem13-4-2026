@@ -51,13 +51,7 @@ export const DrawsSettingsSection: React.FC = () => {
               draw.isActive ? "border-white/10" : "border-red-500/20 opacity-70"
             )}
           >
-            <div className="flex items-center gap-4">
-              <div className={cn(
-                "w-11 h-11 rounded-xl flex items-center justify-center text-xs font-black",
-                draw.isActive ? "bg-brand-primary/10 text-brand-primary" : "bg-red-500/10 text-red-500"
-              )}>
-                {draw.digitsMode}D
-              </div>
+            <div className="flex min-w-0 items-center">
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="font-bold text-base text-white tracking-tight">{draw.name}</h4>

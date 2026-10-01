@@ -25,13 +25,14 @@ interface CardProps {
 
 export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggle, onShare }) => {
   const hasResults = !!draw.results && draw.results.length === 3;
+  const prizesExceedSales = hasResults && draw.totalPrizes > draw.totalSold;
 
   return (
     <div
       className={cn(
         'rounded-[1.2rem] border transition-all duration-300 overflow-hidden mb-1.5',
-        'bg-[#121A2B] border-[#1E293B]',
-        isExpanded ? 'border-brand-primary/30' : ''
+        prizesExceedSales ? 'bg-red-700 border-red-400 shadow-lg shadow-red-950/40' : 'bg-[#121A2B] border-[#1E293B]',
+        isExpanded && !prizesExceedSales ? 'border-brand-primary/30' : ''
       )}
     >
       <div
@@ -41,28 +42,19 @@ export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggl
           'active:bg-white/5'
         )}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
-            className={'text-slate-500'}
+            className={prizesExceedSales ? 'text-white' : 'text-slate-500'}
           >
             <ChevronDown size={16} />
           </motion.div>
 
-          <div
-            className={cn(
-              'w-7 h-7 rounded-lg flex items-center justify-center',
-              'bg-brand-primary/10 text-brand-primary'
-            )}
-          >
-            <span className="text-[9px] font-black">{draw.digitsMode}D</span>
-          </div>
-
-          <div className="ml-0.5">
-            <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1">
               <h4
                 className={cn(
-                  'font-black text-[12px] tracking-tight leading-none',
+                  'min-w-0 truncate whitespace-nowrap font-black text-xs tracking-tight leading-tight',
                   'text-white'
                 )}
               >
@@ -72,25 +64,23 @@ export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggl
                 <Lock size={9} className={'text-slate-600'} />
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex min-w-0 items-center gap-2 mt-1 overflow-hidden whitespace-nowrap">
               <p
                 className={cn(
-                  'text-[8px] font-bold uppercase tracking-widest',
-                  'text-slate-500'
+                  'shrink-0 text-[9px] font-bold uppercase tracking-wide',
+                  prizesExceedSales ? 'text-white' : 'text-slate-400'
                 )}
               >
                 {formatAMPM(draw.drawTime)}
               </p>
               {draw.results && draw.results.length > 0 && (
-                <div className="flex gap-1">
+                <div className="flex shrink-0 gap-1">
                   {draw.results.map((res, idx) => (
                     <span
                       key={idx}
                       className={cn(
-                        'px-1 py-0.5 rounded-md flex items-center justify-center text-[7px] font-black border',
-                        idx === 1
-                          ? 'bg-slate-800 text-slate-400 border-white/5'
-                          : 'bg-brand-primary/20 text-brand-glow border-brand-primary/20'
+                        'min-w-6 px-1 py-0.5 rounded flex items-center justify-center text-[8px] font-black border',
+                        'bg-white text-slate-900 border-white'
                       )}
                     >
                       {res}
@@ -102,20 +92,11 @@ export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggl
           </div>
         </div>
 
-        <div
-          className={cn(
-            'px-3 py-1.5 rounded-xl border shadow-inner flex flex-col items-center justify-center min-w-[70px]',
-            'bg-[#0B1220] border-white/5'
+        <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/10 bg-[#0B1220] px-2 py-1.5">
+          <span className="text-[9px] font-black text-white">V ${formatCurrency(draw.totalSold)}</span>
+          {hasResults && draw.totalPrizes > 0 && (
+            <span className="border-l border-white/15 pl-1.5 text-[9px] font-black text-yellow-200">P ${formatCurrency(draw.totalPrizes)}</span>
           )}
-        >
-          <p
-            className={cn(
-              'text-xs font-black leading-none tracking-tight',
-              'text-white'
-            )}
-          >
-            ${formatCurrency(draw.totalSold)}
-          </p>
         </div>
       </div>
 
@@ -127,7 +108,7 @@ export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggl
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
           >
-            <div className={cn('px-2.5 pb-3', 'bg-black/20')}>
+            <div className={cn('px-2.5 pt-2 pb-3', 'bg-black/20')}>
               <DrawHistoryDetail drawId={draw.id} tickets={draw.tickets} onShare={onShare} />
             </div>
           </motion.div>

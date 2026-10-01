@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layers, Check, X, ArrowRight } from 'lucide-react';
+import { Layers, Check, X, ArrowRight, CalendarCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Draw } from '../../store/useStore';
 import { cn, formatAMPM } from '../../utils/helpers';
@@ -19,27 +19,26 @@ export const ReuseDrawSelectionModal: React.FC<ReuseDrawSelectionModalProps> = (
 }) => {
   const activeDrawIds = useMemo(() => activeDraws.map((draw) => draw.id), [activeDraws]);
   const [selectedIds, setSelectedIds] = useState<string[]>(
-    activeDrawIds[0] ? [activeDrawIds[0]] : []
+    activeDrawIds.length > 0 ? [activeDrawIds[0]] : []
   );
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (isOpen) {
+        setSelectedIds((prev) => {
+            const validSelected = prev.filter((id) => activeDrawIds.includes(id));
+            if (validSelected.length > 0) return validSelected;
+            return activeDrawIds.length > 0 ? [activeDrawIds[0]] : [];
+        });
+    }
+  }, [isOpen, activeDraws, activeDrawIds]);
 
-    setSelectedIds((prev) => {
-      const validSelected = prev.filter((id) => activeDrawIds.includes(id));
-      if (validSelected.length > 0) return validSelected;
-      return activeDrawIds[0] ? [activeDrawIds[0]] : [];
-    });
-  }, [isOpen, activeDrawIds]);
-
-  const validSelectedIds = selectedIds.filter((id) => activeDrawIds.includes(id));
 
   if (!isOpen) return null;
 
   const toggleDraw = (id: string) => {
     setSelectedIds(prev => {
       if (prev.includes(id)) {
-        if (prev.length === 1) return prev; // Must select at least one
+        if (prev.length === 1) return prev;
         return prev.filter(i => i !== id);
       }
       return [...prev, id];
@@ -47,92 +46,92 @@ export const ReuseDrawSelectionModal: React.FC<ReuseDrawSelectionModalProps> = (
   };
 
   const handleConfirm = () => {
-    if (validSelectedIds.length > 0) {
-      onConfirm(validSelectedIds);
+    if (selectedIds.length > 0) {
+      onConfirm(selectedIds);
     }
   };
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+    <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-[#121A2B] w-full max-w-sm rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden"
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+            className="bg-[#0B1220] w-full max-w-sm rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative"
         >
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-brand-primary/20 p-2 rounded-xl">
-                  <Layers size={20} className="text-brand-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-tight">Reutilizar Jugada</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Seleccione los sorteos</p>
-                </div>
-              </div>
-              <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
-                <X size={20} />
-              </button>
+            <div className="p-5 flex flex-col items-center justify-center text-center bg-brand-primary/10 border-b border-brand-primary/20">
+                <Layers size={40} className="text-brand-primary mb-3"/>
+                <h3 className="text-lg font-black text-white">Reutilizar Jugada</h3>
+                <p className="text-xs text-slate-300 font-medium max-w-[300px]">Selecciona los sorteos donde quieres aplicar las jugadas anteriores.</p>
             </div>
 
-            <div className="space-y-2 max-h-[300px] overflow-y-auto no-scrollbar mb-6">
-              {activeDraws.length > 0 ? (
-                activeDraws.map((draw) => (
-                  <button
-                    key={draw.id}
-                    onClick={() => toggleDraw(draw.id)}
-                    className={cn(
-                      "w-full p-4 rounded-2xl flex items-center justify-between border transition-all duration-300",
-                      selectedIds.includes(draw.id) 
-                        ? "bg-brand-primary/10 border-brand-primary/40 shadow-lg shadow-brand-primary/5" 
-                        : "bg-white/5 border-white/5 hover:bg-white/10"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black",
-                        selectedIds.includes(draw.id) ? "bg-brand-primary text-white" : "bg-white/10 text-slate-400"
-                      )}>
-                        {draw.digitsMode}D
-                      </div>
-                      <div className="text-left">
-                        <p className={cn(
-                          "text-sm font-black tracking-tight leading-none",
-                          selectedIds.includes(draw.id) ? "text-white" : "text-slate-400"
-                        )}>{draw.name}</p>
-                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">{formatAMPM(draw.drawTime)}</p>
-                      </div>
+            <div className="p-4 space-y-2 max-h-[40vh] overflow-y-auto no-scrollbar">
+                {activeDraws.length > 0 ? (
+                    activeDraws.map((draw) => (
+                    <button
+                        key={draw.id}
+                        onClick={() => toggleDraw(draw.id)}
+                        className={cn(
+                        "w-full p-3 rounded-2xl flex items-center justify-between border-2 transition-all duration-200",
+                        selectedIds.includes(draw.id) 
+                            ? "bg-brand-primary/10 border-brand-primary/60 shadow-lg shadow-brand-primary/10" 
+                            : "bg-white/5 border-transparent hover:bg-white/10"
+                        )}
+                    >
+                        <div className="flex items-center gap-3.5">
+                        <div className={cn(
+                            "w-9 h-9 rounded-lg flex items-center justify-center text-xs font-black transition-all",
+                            selectedIds.includes(draw.id) ? "bg-brand-primary text-white" : "bg-white/10 text-slate-300"
+                        )}>
+                            {draw.digitsMode}D
+                        </div>
+                        <div className="text-left">
+                            <p className={cn(
+                            "text-sm font-bold tracking-tight leading-none",
+                            selectedIds.includes(draw.id) ? "text-white" : "text-slate-300"
+                            )}>{draw.name}</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">CIERRE: {formatAMPM(draw.drawTime)}</p>
+                        </div>
+                        </div>
+                        <div className={cn(
+                        "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all",
+                        selectedIds.includes(draw.id) 
+                            ? "bg-brand-primary border-brand-strong" 
+                            : "border-white/10"
+                        )}>
+                        {selectedIds.includes(draw.id) && <Check size={16} className="text-white" strokeWidth={3}/>}
+                        </div>
+                    </button>
+                    ))
+                ) : (
+                    <div className="py-12 text-center opacity-50">
+                        <CalendarCheck size={32} className="mx-auto mb-3 text-slate-600"/>
+                        <p className="text-sm font-bold text-slate-400">No hay Sorteos Activos</p>
+                        <p className="text-xs font-medium text-slate-500 mt-1">Por favor, espera a que se abran nuevos sorteos.</p>
                     </div>
-                    <div className={cn(
-                      "w-6 h-6 rounded-full border flex items-center justify-center transition-all",
-                      selectedIds.includes(draw.id) 
-                        ? "bg-brand-primary border-brand-primary" 
-                        : "border-white/10"
-                    )}>
-                      {selectedIds.includes(draw.id) && <Check size={14} className="text-white" />}
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div className="py-8 text-center opacity-40">
-                  <p className="text-xs font-bold uppercase tracking-widest">No hay sorteos activos disponibles</p>
-                </div>
-              )}
+                )}
             </div>
 
-            <button
-              onClick={handleConfirm}
-              disabled={validSelectedIds.length === 0}
-              className="w-full bg-brand-primary text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-brand-primary/20 active:scale-[0.98] transition-all disabled:opacity-20"
-            >
-              Confirmar Selección
-              <ArrowRight size={18} />
-            </button>
-          </div>
+            <div className="p-4 bg-black/20 border-t border-white/5">
+                <button
+                    onClick={handleConfirm}
+                    disabled={selectedIds.length === 0}
+                    className="w-full bg-brand-primary text-black h-12 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40"
+                >
+                    Confirmar ({selectedIds.length}) Sorteos
+                    <ArrowRight size={18} />
+                </button>
+            </div>
+
+            <div className="absolute top-3 right-3">
+                <button
+                    onClick={onClose}
+                    className="w-8 h-8 bg-black/30 text-white/70 rounded-full flex items-center justify-center backdrop-blur-sm active:bg-black/50 transition-colors"
+                >
+                    <X size={18} />
+                </button>
+            </div>
         </motion.div>
-      </div>
-    </AnimatePresence>
+    </div>
   );
 };

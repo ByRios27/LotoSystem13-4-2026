@@ -2,12 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { Calendar, ChevronDown, Lock, BarChart3 } from 'lucide-react';
 import { cn, formatAMPM, formatCurrency, getDrawStatus } from '../../utils/helpers';
 import { Ticket, Entry, Draw, useStore } from '../../store/useStore';
-import { calculateEntryPrize } from '../../utils/prizeCalculator';
+import { calculateTicketPayoutForDraw, calculateTicketSalesForDraw, getEntriesForDraw } from '../../utils/ticketUtils';
 import { motion, AnimatePresence } from 'motion/react';
 import { StatsResultsHeader } from './StatsResultsHeader';
 import { StatsNumberGrid } from './StatsNumberGrid';
 import { StatsCombinationsSection } from './StatsCombinationsSection';
-import { calculateTicketPayoutForDraw, calculateTicketSalesForDraw, getEntriesForDraw } from '../../utils/ticketUtils';
 
 interface DrawStatsProps {
   draw: Draw;
@@ -17,18 +16,15 @@ interface DrawStatsProps {
 export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Calculate stats for this draw
   const { settings } = useStore();
   const stats = useMemo(() => {
     const drawTickets = tickets.filter(t => t.drawIds?.includes(draw.id));
     
     const pricePerTime = settings.pricePerTime || 1;
 
-    // Total sold for this draw (proportional if multi-draw) - in money for internal loss calculation
     const totalSoldMoney = drawTickets.reduce((sum, t) => sum + calculateTicketSalesForDraw(t, draw.id), 0);
     const totalFractions = totalSoldMoney / pricePerTime;
 
-    // Total prizes for this draw
     let totalPrizes = 0;
     if (draw.results && draw.results.length === 3) {
       drawTickets.forEach(t => {
@@ -36,7 +32,6 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
       });
     }
 
-    // Sales by number (00-99)
     const salesByNumber: { [number: string]: number } = {};
     const prizesByNumber: { [number: string]: number } = {};
     const combinationsMap: { [key: string]: Entry } = {};
@@ -52,12 +47,7 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
           if (e.prize && e.prize > 0) {
             prizesByNumber[num] = (prizesByNumber[num] || 0) + e.prize;
           }
-        } else if (
-          e.type === 'PALÉ' ||
-          e.type === 'PAL\u00C3\u2030' ||
-          e.type === 'PAL\u00C3\u0192\u00E2\u20AC\u00B0'
-        ) {
-          // Add to both numbers in the grid
+        } else if (e.type === 'PALÉ') {
           const n1 = e.number.substring(0, 2);
           const n2 = e.number.substring(2, 4);
           salesByNumber[n1] = (salesByNumber[n1] || 0) + pieces;
@@ -75,7 +65,6 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
             (combinationsMap[key] as any).quantity = pieces;
           }
         } else if (e.type === 'BILLETE') {
-          // Add to last 2 digits in the grid
           const num = e.number.slice(-2);
           salesByNumber[num] = (salesByNumber[num] || 0) + pieces;
 
@@ -191,16 +180,14 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
             )}>
               <div className="h-[1px] w-full bg-white/5 mb-4" />
               
-              {/* Results Block */}
               <StatsResultsHeader results={draw.results} />
 
-              {/* Grid */}
               <StatsNumberGrid 
+                drawId={draw.id}
                 salesByNumber={stats.salesByNumber} 
                 results={draw.results}
               />
 
-              {/* Volume Legend */}
               <div className="flex items-center justify-center gap-4 mt-4 opacity-40">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-white/10" />
@@ -216,7 +203,6 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
                 </div>
               </div>
 
-              {/* Combinations */}
               <StatsCombinationsSection combinations={stats.combinations} />
             </div>
           </motion.div>

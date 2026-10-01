@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { useStore, Draw, Ticket, Entry } from '../store/useStore';
+import { createPortal } from 'react-dom';
+import { useStore, Ticket, Entry } from '../store/useStore';
 import { calculateEntryPrize } from '../utils/prizeCalculator';
-import { cn, formatAMPM, sortDrawsByTime, formatCurrency, getPaleParts } from '../utils/helpers';
+import { cn, formatAMPM, sortDrawsChronologically, sortDrawsByScheduleDescending, formatCurrency, getPaleParts } from '../utils/helpers';
 import { PinValidationModal } from './PinValidationModal';
 import { 
   Trophy, 
@@ -15,11 +16,9 @@ import {
   Lock as LockIcon,
   Sun,
   Waves,
-  Plus,
-  Edit2
+  Edit2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { DrawFormModal } from './Draws/DrawFormModal';
 import { PullToRefresh } from './PullToRefresh';
 import { calculateTicketPayoutForDraw, calculateTicketSalesForDraw, getEntriesForDraw } from '../utils/ticketUtils';
 
@@ -28,25 +27,29 @@ export const ResultsPage: React.FC = () => {
   
   const [selectedDrawId, setSelectedDrawId] = useState<string | null>(null);
   const [isDrawListOpen, setIsDrawListOpen] = useState(false);
+  const [isResultEditorOpen, setIsResultEditorOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [isDrawModalOpen, setIsDrawModalOpen] = useState(false);
-  const [editingDraw, setEditingDraw] = useState<Draw | null>(null);
   
   const [r1, setR1] = useState('');
   const [r2, setR2] = useState('');
   const [r3, setR3] = useState('');
   
   const [showSuccess, setShowSuccess] = useState(false);
-
-  const sortedDraws = useMemo(() => sortDrawsByTime(draws), [draws]);
+  const [successMessage, setSuccessMessage] = useState('Resultados guardados');
 
   const filteredDraws = useMemo(() => {
-    return sortedDraws.filter(draw => {
+    const visibleDraws = draws.filter(draw => {
       const hasResults = draw.results && draw.results.length > 0;
       const hasSales = tickets.some(t => t.drawIds?.includes(draw.id));
       return hasResults || hasSales;
     });
-  }, [sortedDraws, tickets]);
+    return sortDrawsByScheduleDescending(visibleDraws);
+  }, [draws, tickets]);
+
+  const drawsPendingResults = useMemo(
+    () => sortDrawsChronologically(draws.filter((draw) => draw.isActive && !(draw.results && draw.results.length > 0))),
+    [draws]
+  );
 
   const selectedDraw = useMemo(() => draws.find(d => d.id === selectedDrawId), [draws, selectedDrawId]);
   const resultDigits = selectedDraw?.digitsMode || 2;
@@ -67,12 +70,15 @@ export const ResultsPage: React.FC = () => {
   }, [selectedDraw]);
 
   const handleSave = async () => {
-    if (!selectedDrawId) return;
+    if (!isCEO || !selectedDrawId) return;
     if (r1.length !== resultDigits || r2.length !== resultDigits || r3.length !== resultDigits) return;
 
     try {
       await setResults(selectedDrawId, [r1, r2, r3]);
+      setSuccessMessage('Resultados guardados');
       setShowSuccess(true);
+      setSelectedDrawId(null);
+      setIsResultEditorOpen(false);
       setTimeout(() => setShowSuccess(false), 2000);
     } catch (error) {
       console.error('Error saving draw results:', error);
@@ -81,12 +87,18 @@ export const ResultsPage: React.FC = () => {
   };
 
   const confirmDelete = async () => {
-    if (!selectedDrawId) return;
+    if (!isCEO || !selectedDrawId) return;
     try {
       await removeResults(selectedDrawId);
       setR1('');
       setR2('');
       setR3('');
+      setSelectedDrawId(null);
+      setIsResultEditorOpen(false);
+      setIsPinModalOpen(false);
+      setSuccessMessage('Resultados eliminados');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2500);
     } catch (error) {
       console.error('Error removing draw results:', error);
       alert('No se pudieron eliminar los resultados en Firestore.');
@@ -233,49 +245,39 @@ export const ResultsPage: React.FC = () => {
       >
         <div className="max-w-md mx-auto p-3 space-y-3">
           {/* Compact Action Card */}
-          <div 
-            onClick={() => setIsDrawListOpen(true)}
-            className="bg-brand-primary rounded-2xl p-4 shadow-lg flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all group overflow-hidden relative"
-          >
-            <div className="relative z-10">
-              <h3 className="font-black text-xs text-white uppercase tracking-widest leading-none">Añadir Resultados</h3>
-              <p className="text-[8px] text-white/70 font-bold mt-1 uppercase tracking-tight">Seleccionar sorteo para ingresar números</p>
+          {isCEO && (
+            <div 
+              onClick={() => setIsDrawListOpen(true)}
+              className="bg-brand-primary rounded-2xl p-4 shadow-lg flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all group overflow-hidden relative"
+            >
+              <div className="relative z-10">
+                <h3 className="font-black text-xs text-white uppercase tracking-widest leading-none">Añadir Resultados</h3>
+                <p className="text-[8px] text-white/70 font-bold mt-1 uppercase tracking-tight">Seleccionar sorteo para ingresar números</p>
+              </div>
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white relative z-10">
+                <Trophy size={16} />
+              </div>
             </div>
-            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white relative z-10">
-              <Trophy size={16} />
-            </div>
-          </div>
+          )}
 
           {/* Results List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between px-2">
               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Sorteos de Hoy</h3>
-              {isCEO && (
-                <button 
-                  onClick={() => {
-                    setEditingDraw(null);
-                    setIsDrawModalOpen(true);
-                  }}
-                  className="w-7 h-7 rounded-lg bg-brand-primary/10 text-brand-primary flex items-center justify-center hover:bg-brand-primary/20 transition-colors"
-                >
-                  <Plus size={14} />
-                </button>
-              )}
             </div>
             <div className="space-y-1.5">
               {filteredDraws.map((draw) => (
                 <div 
                   key={draw.id} 
                   className={cn(
-                    "bg-[#121A2B] p-3 rounded-xl border transition-all flex items-center justify-between shadow-md cursor-pointer group relative",
-                    selectedDrawId === draw.id ? "border-brand-primary/40 ring-1 ring-brand-primary/20" : "border-white/5 hover:bg-white/10"
+                    "bg-[#121A2B] p-3 rounded-xl border transition-all flex items-center justify-between shadow-md group relative",
+                    selectedDrawId === draw.id ? "border-brand-primary/40 ring-1 ring-brand-primary/20" : "border-white/5"
                   )}
-                  onClick={() => setSelectedDrawId(draw.id)}
                 >
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center",
-                      draw.results ? "bg-brand-primary/20 text-brand-primary" : "bg-white/10 text-slate-500"
+                      draw.results?.length ? "bg-brand-primary/20 text-brand-primary" : "bg-white/10 text-slate-500"
                     )}>
                       <Clock size={16} />
                     </div>
@@ -285,8 +287,9 @@ export const ResultsPage: React.FC = () => {
                     </div>
                   </div>
                   
-                  {draw.results ? (
-                    <div className="flex gap-1">
+                  {draw.results && draw.results.length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <div className="grid grid-cols-3 gap-1">
                       {draw.results.map((r, i) => (
                         <div key={i} className={cn(
                           "w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black border",
@@ -297,6 +300,33 @@ export const ResultsPage: React.FC = () => {
                           {r}
                         </div>
                       ))}
+                      </div>
+                      {isCEO && (
+                        <div className="flex gap-1">
+                          <button
+                            aria-label={`Editar resultados de ${draw.name}`}
+                            title="Editar resultados"
+                            onClick={() => {
+                              setSelectedDrawId(draw.id);
+                              setIsResultEditorOpen(true);
+                            }}
+                            className="w-8 h-8 rounded-lg bg-white/5 text-slate-300 hover:text-white flex items-center justify-center"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            aria-label={`Eliminar resultados de ${draw.name}`}
+                            title="Eliminar resultados"
+                            onClick={() => {
+                              setSelectedDrawId(draw.id);
+                              setIsPinModalOpen(true);
+                            }}
+                            className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 flex items-center justify-center"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Pendiente</span>
@@ -306,12 +336,13 @@ export const ResultsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Selected Draw Input Section */}
-          {selectedDraw && (
+          {/* Selected draw entry/edit modal */}
+          {isCEO && isResultEditorOpen && selectedDraw && createPortal(
+            <div className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center overflow-y-auto p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 bg-black/80 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-2.5"
+              className="my-auto w-full max-w-md max-h-[92dvh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0B1220] p-3 shadow-2xl space-y-2.5"
             >
               {/* Compact Draw Info */}
               <div className={cn(
@@ -335,7 +366,10 @@ export const ResultsPage: React.FC = () => {
                     </p>
                   </div>
                   <button 
-                    onClick={() => setSelectedDrawId(null)}
+                    onClick={() => {
+                      setSelectedDrawId(null);
+                      setIsResultEditorOpen(false);
+                    }}
                     className="w-8 h-8 rounded-lg bg-white/5 text-slate-500 hover:text-white flex items-center justify-center transition-colors"
                   >
                     <X size={16} />
@@ -405,7 +439,10 @@ export const ResultsPage: React.FC = () => {
                   
                   {selectedDraw.results && (
                     <button 
-                      onClick={() => setIsPinModalOpen(true)}
+                      onClick={() => {
+                        setIsResultEditorOpen(false);
+                        setIsPinModalOpen(true);
+                      }}
                       className="w-12 h-10 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl flex items-center justify-center active:scale-[0.98] transition-all"
                     >
                       <Trash2 size={16} />
@@ -440,13 +477,15 @@ export const ResultsPage: React.FC = () => {
                 </div>
               </div>
             </motion.div>
+            </div>,
+            document.body
           )}
         </div>
       </PullToRefresh>
 
       {/* Draw Selection Modal */}
       <AnimatePresence>
-        {isDrawListOpen && (
+        {isCEO && isDrawListOpen && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
@@ -469,11 +508,12 @@ export const ResultsPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto no-scrollbar">
-                  {filteredDraws.map((draw) => (
+                  {drawsPendingResults.map((draw) => (
                     <div 
                       key={draw.id}
                       onClick={() => {
                         setSelectedDrawId(draw.id);
+                        setIsResultEditorOpen(true);
                         setIsDrawListOpen(false);
                       }}
                       className={cn(
@@ -506,6 +546,11 @@ export const ResultsPage: React.FC = () => {
                       )}
                     </div>
                   ))}
+                  {drawsPendingResults.length === 0 && (
+                    <p className="py-8 text-center text-xs font-bold text-slate-500">
+                      No hay sorteos activos pendientes de resultados.
+                    </p>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -523,7 +568,7 @@ export const ResultsPage: React.FC = () => {
             className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-brand-primary px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[100]"
           >
             <CheckCircle2 size={18} className="text-white" />
-            <span className="text-xs font-black text-white uppercase tracking-widest">Resultados Guardados</span>
+            <span className="text-xs font-black text-white uppercase tracking-widest">{successMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -536,15 +581,6 @@ export const ResultsPage: React.FC = () => {
         description="Confirma tu PIN para eliminar los resultados de este sorteo."
       />
 
-      {/* Draw Management Modal */}
-      <AnimatePresence>
-        {isDrawModalOpen && (
-          <DrawFormModal 
-            draw={editingDraw} 
-            onClose={() => setIsDrawModalOpen(false)} 
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, Ticket, Draw } from '../store/useStore';
-import { formatCurrency, formatAMPM, cn, getCurrentTimeMinutes } from '../utils/helpers';
+import { formatCurrency, formatAMPM, cn, sortDrawsByTime } from '../utils/helpers';
 import { Share2, Calendar, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ClosureReceipt } from './ClosureReceipt';
@@ -24,13 +24,6 @@ export const ClosuresPage: React.FC = () => {
   const [selectedDrawId, setSelectedDrawId] = useState<string | null>(null);
 
   const salesByDraw = useMemo(() => {
-    const nowMinutes = getCurrentTimeMinutes();
-    const getSortMinutes = (draw: Draw) => draw.closeTimeSort ?? draw.drawTimeSort ?? 0;
-    const distanceToNext = (targetMinutes: number) => {
-      const raw = targetMinutes - nowMinutes;
-      return raw >= 0 ? raw : raw + 1440;
-    };
-
     const report: Record<string, {
       draw: Draw;
       tickets: Ticket[];
@@ -76,14 +69,11 @@ export const ClosuresPage: React.FC = () => {
       });
     });
 
-    return Object.values(report)
+    const activeDraws = Object.values(report)
       .filter((item) => item.totalSales > 0 || item.tickets.length > 0)
-      .sort((a, b) => {
-        const distanceA = distanceToNext(getSortMinutes(a.draw));
-        const distanceB = distanceToNext(getSortMinutes(b.draw));
-        if (distanceA !== distanceB) return distanceA - distanceB;
-        return (a.draw.drawTimeSort || 0) - (b.draw.drawTimeSort || 0);
-      });
+      .map((item) => item.draw);
+
+    return sortDrawsByTime(activeDraws).map((draw) => report[draw.id]);
   }, [tickets, draws]);
 
   const displayedDraws = useMemo(() => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn, formatCurrency } from '../../utils/helpers';
+import { cn } from '../../utils/helpers';
 
 interface GridCellProps {
   number: string;
@@ -7,64 +7,58 @@ interface GridCellProps {
   isWinner?: boolean;
   position?: '1er' | '2do' | '3er';
   maxAmount: number;
+  onClick: () => void;
 }
 
-export const StatsGridCell: React.FC<GridCellProps> = ({
-  number,
-  amount,
-  isWinner,
-  position,
-  maxAmount,
+export const StatsGridCell: React.FC<GridCellProps> = React.memo(({ 
+  number, 
+  amount, 
+  isWinner, 
+  position, 
+  maxAmount, 
+  onClick 
 }) => {
-  // Calculate intensity for heatmap
   const intensity = maxAmount > 0 ? (amount / maxAmount) : 0;
-  
-  // Define background color based on intensity
-  const getBgColor = () => {
-    if (isWinner) {
-      if (position === '1er') return 'bg-yellow-400/30 border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.3)]';
-      if (position === '2do') return 'bg-blue-500/30 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)]';
-      if (position === '3er') return 'bg-orange-500/30 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)]';
-      return 'bg-yellow-400/30 border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.3)]';
-    }
-    if (amount === 0) return 'bg-white/5 border-white/5';
-    
-    if (intensity > 0.8) return 'bg-brand-primary/60 border-brand-primary/20';
-    if (intensity > 0.5) return 'bg-brand-primary/40 border-brand-primary/10';
-    if (intensity > 0.2) return 'bg-brand-primary/20 border-brand-primary/5';
-    return 'bg-brand-primary/10 border-brand-primary/5';
+
+  const getBackgroundColor = () => {
+    if (isWinner) return 'bg-brand-primary';
+    if (intensity === 0) return 'bg-white/5';
+    return `rgba(22, 163, 74, ${0.1 + intensity * 0.8})`;
   };
 
   const getTextColor = () => {
-    if (isWinner) {
-      if (position === '1er') return 'text-yellow-400';
-      if (position === '2do') return 'text-blue-400';
-      if (position === '3er') return 'text-orange-400';
-      return 'text-yellow-400';
-    }
-    return amount > 0 ? "text-white" : "text-slate-600";
+    if (isWinner) return 'text-white';
+    if (intensity > 0.6) return 'text-white';
+    return 'text-slate-300';
   };
 
   return (
-    <div className={cn(
-      "flex flex-col items-center justify-center p-1 rounded-md border transition-all duration-300 h-10 w-full relative overflow-hidden",
-      getBgColor()
-    )}>
-      <span className={cn(
-        "text-[10px] font-black leading-none mb-0.5",
-        getTextColor()
-      )}>
+    <button
+      onClick={onClick}
+      disabled={amount === 0}
+      className={cn(
+        'relative w-full aspect-square rounded-lg flex flex-col justify-center items-center shadow-inner transition-all duration-200',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        !isWinner && 'hover:ring-2 hover:ring-brand-primary/50'
+      )}
+      style={{ backgroundColor: getBackgroundColor() }}
+    >
+      <span className={cn('text-[13px] font-black tracking-tight leading-none', getTextColor())}>
         {number}
       </span>
-      
       {amount > 0 && (
         <span className={cn(
-          "text-[8px] font-bold leading-none",
-          isWinner ? getTextColor() : "text-slate-400"
+          'text-[8px] font-bold mt-0.5',
+          isWinner ? 'text-white/70' : intensity > 0.6 ? 'text-white/60' : 'text-slate-500'
         )}>
-          {Math.round(amount)}
+          x{amount}
         </span>
       )}
-    </div>
+      {position && (
+        <span className="absolute -top-1 -right-1.5 bg-yellow-400 text-black text-[7px] font-black px-1 py-0.5 rounded-full">
+          {position}
+        </span>
+      )}
+    </button>
   );
-};
+});

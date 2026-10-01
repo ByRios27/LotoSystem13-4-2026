@@ -2,13 +2,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { releaseTicketLimits } from '../services/betService';
 import { db, auth } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocFromCache, getDocFromServer, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { calculateEntryPrize } from '../utils/prizeCalculator';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
 import { generateSellerId } from '../utils/helpers';
 import type { DrawEntryGroup } from '../utils/ticketUtils';
 import { getTicketFlatEntries, normalizeTicketDrawEntries } from '../utils/ticketUtils';
 
+// ... (interfaces remain the same)
 export type DrawStatus = 'open' | 'closed' | 'inactive';
 
 export interface Draw {
@@ -25,6 +27,7 @@ export interface Draw {
   };
   isActive: boolean;
   results?: string[];
+  resultsEnteredAt?: number;
   createdAt: number;
   updatedAt: number;
   createdBy: string;
@@ -32,6 +35,7 @@ export interface Draw {
 }
 
 export type GameType = 'CHANCE' | 'PALÉ' | 'BILLETE';
+export type WinningPosition = '1er' | '2do' | '3er' | '1er + 2do' | '1er + 3er' | '2do + 3er';
 
 export interface Entry {
   id?: string;
@@ -41,7 +45,8 @@ export interface Entry {
   type: GameType;
   prize?: number;
   status?: 'pending' | 'winner' | 'loser';
-  winningPosition?: '1er' | '2do' | '3er';
+  winningPosition?: WinningPosition;
+  priceId?: string; // ID for the price used, for CHANCE type
 }
 
 export interface Ticket {
@@ -96,7 +101,11 @@ export interface BilleteSettings {
   };
 }
 
-export interface ChanceSettings {
+export interface ChancePrice {
+  id: string;
+  name: string;
+  value: number;
+  isDefault?: boolean;
   payouts: {
     first: number;
     second: number;
@@ -105,9 +114,9 @@ export interface ChanceSettings {
 }
 
 export interface AppSettings {
-  pricePerTime: number;
+  pricePerTime: number; // Fallback/legacy
+  chancePrices: ChancePrice[];
   commissionRate: number; // e.g., 0.2 for 20%
-  chance: ChanceSettings;
   pale: PaleSettings;
   billete: BilleteSettings;
 }
@@ -185,23 +194,74 @@ interface AppState {
   getGlobalStats: () => { totalSales: number; totalCommission: number; totalPrizes: number; totalCapitalInjection: number; utility: number };
 }
 
-// Connection test
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. ");
-    }
-    // Skip logging for other errors, as this is simply a connection test.
-  }
+const defaultPayouts = { first: 60, second: 8, third: 4 };
+
+const defaultDrawDefinitions: Array<{ id: string; name: string; drawTime: string; digitsMode?: 2 | 4 }> = [
+  { id: 'anguilla-0900', name: 'Anguilla 🇦🇮 9am', drawTime: '09:00' },
+  { id: 'anguilla-1000', name: 'Anguilla 🇦🇮 10am', drawTime: '10:00' },
+  { id: 'la-primera-1100', name: 'La Primera 🇩🇴 11am', drawTime: '11:00' },
+  { id: 'nica-1200', name: 'Nica 🇳🇮 12md', drawTime: '12:00' },
+  { id: 'honduras-1200', name: 'Honduras 🇭🇳 12md', drawTime: '12:00' },
+  { id: 'florida-1230', name: 'Florida 🦩 12:30pm', drawTime: '12:30' },
+  { id: 'anguilla-1300', name: 'Anguilla 🇦🇮 1pm', drawTime: '13:00' },
+  { id: 'new-york-1330', name: 'New York 🗽 1:30pm', drawTime: '13:30' },
+  { id: 'tica-monazos-1355', name: 'Tica(Monazos) 🇨🇷 1:55pm', drawTime: '13:55' },
+  { id: 'anguilla-1500', name: 'Anguilla 🇦🇮 3pm', drawTime: '15:00' },
+  { id: 'nacional-1500', name: 'Nacional 🇵🇦 3pm (4 cifras)', drawTime: '15:00', digitsMode: 4 },
+  { id: 'nica-1600', name: 'Nica 🇳🇮 4pm', drawTime: '16:00' },
+  { id: 'honduras-1600', name: 'Honduras 🇭🇳 4pm', drawTime: '16:00' },
+  { id: 'tica-monazos-1730', name: 'Tica(Monazos) 🇨🇷 5:30pm', drawTime: '17:30' },
+  { id: 'la-primera-1800', name: 'La Primera 🇩🇴 6pm', drawTime: '18:00' },
+  { id: 'anguilla-1900', name: 'Anguilla 🇦🇮 7pm', drawTime: '19:00' },
+  { id: 'tica-monazos-2030', name: 'Tica(Monazos) 🇨🇷 8:30pm', drawTime: '20:30' },
+  { id: 'tica-tradicional-2030', name: 'Tica Trad. 🇨🇷 8:30pm', drawTime: '20:30' },
+  { id: 'florida-2050', name: 'Florida 🦩 8:50pm', drawTime: '20:50' },
+  { id: 'new-york-2130', name: 'New York 🗽 9:30pm', drawTime: '21:30' },
+  { id: 'nica-2200', name: 'Nica 🇳🇮 10pm', drawTime: '22:00' },
+  { id: 'honduras-2200', name: 'Honduras 🇭🇳 10pm', drawTime: '22:00' },
+].map(({ id, name, drawTime, digitsMode = 2 }) => {
+  const [hours, minutes] = drawTime.split(':').map(Number);
+  const drawTimeSort = hours * 60 + minutes;
+  const closeTimeSort = drawTimeSort - 3;
+  const now = Date.now();
+
+  return {
+    id,
+    name,
+    drawTime,
+    drawTimeSort,
+    closeTime: `${Math.floor(closeTimeSort / 60).toString().padStart(2, '0')}:${(closeTimeSort % 60).toString().padStart(2, '0')}`,
+    closeTimeSort,
+    digitsMode,
+    allowedSpecialBets: { pale: true, billete: false },
+    isActive: true,
+    results: [],
+    createdAt: now,
+    updatedAt: now,
+    createdBy: 'system',
+    updatedBy: 'system',
+  };
+});
+
+const defaultDraws: Draw[] = defaultDrawDefinitions;
+
+if (typeof window !== 'undefined') {
+  window.localStorage.removeItem('lottopro-storage');
 }
-testConnection();
+
+const handleInactiveUser = () => {
+  alert('Tu cuenta ha sido desactivada. Contacta al administrador.');
+  signOut(auth).catch((error) => {
+    console.error('Error during sign out after deactivation:', error);
+  });
+  // Setting currentUser to null will redirect to login page via AuthGuard
+  useStore.getState().setCurrentUser(null);
+};
 
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      draws: [],
+      draws: defaultDraws,
       tickets: [],
       isTicketsRefreshing: false,
       lastTicketsSyncAt: null,
@@ -211,14 +271,16 @@ export const useStore = create<AppState>()(
       currentUser: null,
       settings: {
         pricePerTime: 1,
-        commissionRate: 0.2,
-        chance: {
-          payouts: {
-            first: 60,
-            second: 8,
-            third: 4
+        chancePrices: [
+          { 
+            id: 'default', 
+            name: 'Normal', 
+            value: 1, 
+            isDefault: true, 
+            payouts: defaultPayouts
           }
-        },
+        ],
+        commissionRate: 0.2,
         pale: {
           enabled: true,
           minAmount: 0.10,
@@ -241,6 +303,7 @@ export const useStore = create<AppState>()(
           }
         }
       },
+      // ... other initial state properties
       nextTicketSequence: 1,
       currentPage: 'sales',
       reusedTicket: null,
@@ -256,7 +319,7 @@ export const useStore = create<AppState>()(
       },
       updateDraw: (id, updatedDraw) => {
         if (auth.currentUser) {
-          updateDoc(doc(db, 'draws', id), updatedDraw as any).catch(err => handleFirestoreError(err, OperationType.UPDATE, `draws/${id}`));
+          setDoc(doc(db, 'draws', id), updatedDraw as any, { merge: true }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `draws/${id}`));
         }
         set((state) => ({
           draws: state.draws.map((d) => (d.id === id ? { ...d, ...updatedDraw } : d)),
@@ -283,7 +346,6 @@ export const useStore = create<AppState>()(
           ? normalizedDrawEntries.flatMap((group) => group.entries)
           : ticket.entries;
 
-        // Accumulate entries with same number and type
         const accumulatedEntries: Entry[] = [];
         sourceEntries.forEach(entry => {
           const existing = accumulatedEntries.find(e => e.number === entry.number && e.type === entry.type);
@@ -305,12 +367,12 @@ export const useStore = create<AppState>()(
 
         const finalTicket: Ticket = {
           ...ticket,
-          userId: auth.currentUser?.uid,
-          drawId: ticket.drawIds?.[0],
+          userId: auth.currentUser?.uid ?? null,
+          drawId: ticket.drawIds?.[0] ?? null,
           entryTypes: Array.from(new Set(accumulatedEntries.map((entry) => entry.type))),
           hasResults: false,
           isWinner: false,
-          sellerId: currentUser.sellerId,
+          ...(currentUser.sellerId ? { sellerId: currentUser.sellerId } : {}),
           drawEntries: normalizedDrawEntries,
           entries: accumulatedEntries,
           total,
@@ -394,23 +456,6 @@ export const useStore = create<AppState>()(
           handleFirestoreError(err, OperationType.DELETE, `tickets/${id}`);
           throw err;
         }
-        /* set((state) => {
-          const ticketToDelete = state.tickets.find(t => t.id === id);
-          if (ticketToDelete) {
-            ticketToDelete.entries.forEach(entry => {
-              if (entry.type === 'PALÉ') {
-                releasePaleLimit(entry.number, entry.amount);
-              } else if (entry.type === 'BILLETE') {
-                const billeteSettings = state.settings.billete || { unitPrice: 1.00 };
-                const units = Math.round(entry.amount / billeteSettings.unitPrice);
-                releaseBilleteLimit(entry.number, units);
-              }
-            });
-          }
-          return {
-            tickets: state.tickets.filter((t) => t.id !== id),
-          };
-        }); */
       },
       incrementSequence: () => set((state) => ({ nextTicketSequence: state.nextTicketSequence + 1 })),
       
@@ -424,17 +469,24 @@ export const useStore = create<AppState>()(
       },
       updateUser: (id, updatedUser) => {
         if (auth.currentUser) {
-          updateDoc(doc(db, 'users', id), updatedUser as any).catch(err => handleFirestoreError(err, OperationType.UPDATE, `users/${id}`));
+            updateDoc(doc(db, 'users', id), updatedUser as any).catch(err => handleFirestoreError(err, OperationType.UPDATE, `users/${id}`));
         }
         set((state) => {
-          const newUsers = state.users.map((u) => (u.id === id ? { ...u, ...updatedUser } : u));
-          const isCurrentUser = state.currentUser?.id === id;
-          return {
-            users: newUsers,
-            currentUser: isCurrentUser ? { ...state.currentUser!, ...updatedUser } : state.currentUser
-          };
+            const newUsers = state.users.map((u) => (u.id === id ? { ...u, ...updatedUser } : u));
+            const isCurrentUser = state.currentUser?.id === id;
+
+            // Security Check: If the current user is being deactivated, log them out.
+            if (isCurrentUser && updatedUser.status === 'inactive' && state.currentUser?.status === 'active') {
+                // Schedule the logout to allow the UI to update first, preventing race conditions.
+                setTimeout(handleInactiveUser, 0);
+            }
+
+            return {
+                users: newUsers,
+                currentUser: isCurrentUser ? { ...state.currentUser!, ...updatedUser } : state.currentUser
+            };
         });
-      },
+    },
       deleteUser: (id) => {
         if (auth.currentUser) {
           deleteDoc(doc(db, 'users', id)).catch(err => handleFirestoreError(err, OperationType.DELETE, `users/${id}`));
@@ -443,18 +495,26 @@ export const useStore = create<AppState>()(
           users: state.users.filter((u) => u.id !== id),
         }));
       },
-      setCurrentUser: (user) => set({ currentUser: user }),
+      setCurrentUser: (user) => {
+        // Security Check: If a user is inactive, prevent them from being set as the current user.
+        if (user && user.status === 'inactive') {
+            alert('Este usuario está inactivo. Contacte al administrador.');
+            set({ currentUser: null }); // Ensure no user is logged in.
+            return;
+        }
+        set({ currentUser: user });
+    },
 
       updateSettings: (newSettings) => {
         if (auth.currentUser) {
-          // Update individual settings in Firestore
+          // Firestore persistence
+          const settingsToSave: { [key: string]: any } = {};
           if (newSettings.pale) {
             setDoc(doc(db, 'gameSettings', 'pale'), newSettings.pale).catch(err => handleFirestoreError(err, OperationType.WRITE, 'gameSettings/pale'));
           }
           if (newSettings.billete) {
             setDoc(doc(db, 'gameSettings', 'billete'), newSettings.billete).catch(err => handleFirestoreError(err, OperationType.WRITE, 'gameSettings/billete'));
           }
-          // For other general settings, we could have a 'general' doc
           const { pale, billete, ...general } = newSettings;
           if (Object.keys(general).length > 0) {
             setDoc(doc(db, 'gameSettings', 'general'), general, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, 'gameSettings/general'));
@@ -472,14 +532,20 @@ export const useStore = create<AppState>()(
           throw new Error('No authenticated user');
         }
 
+        const draw = get().draws.find((item) => item.id === drawId);
+        if (!draw) {
+          throw new Error(`Draw not found: ${drawId}`);
+        }
+
+        const resultsEnteredAt = Date.now();
         try {
-          await updateDoc(doc(db, 'draws', drawId), { results });
+          await setDoc(doc(db, 'draws', drawId), { ...draw, results, resultsEnteredAt }, { merge: true });
         } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `draws/${drawId}`);
+          handleFirestoreError(err, OperationType.WRITE, `draws/${drawId}`);
         }
 
         set((state) => {
-          const updatedDraws = state.draws.map((d) => (d.id === drawId ? { ...d, results } : d));
+          const updatedDraws = state.draws.map((d) => (d.id === drawId ? { ...d, results, resultsEnteredAt } : d));
           return { draws: updatedDraws };
         });
         get().recalculatePrizes();
@@ -490,16 +556,21 @@ export const useStore = create<AppState>()(
           throw new Error('No authenticated user');
         }
 
+        const draw = get().draws.find((item) => item.id === drawId);
+        if (!draw) {
+          throw new Error(`Draw not found: ${drawId}`);
+        }
+
         try {
-          await updateDoc(doc(db, 'draws', drawId), { results: deleteField() });
+          await setDoc(doc(db, 'draws', drawId), { ...draw, results: deleteField(), resultsEnteredAt: deleteField() }, { merge: true });
         } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `draws/${drawId}`);
+          handleFirestoreError(err, OperationType.WRITE, `draws/${drawId}`);
         }
 
         set((state) => {
           const updatedDraws = state.draws.map((d) => {
             if (d.id === drawId) {
-              const { results, ...rest } = d;
+              const { results, resultsEnteredAt, ...rest } = d;
               return rest;
             }
             return d;
@@ -525,7 +596,7 @@ export const useStore = create<AppState>()(
               const draw = drawMap.get(group.drawId);
               const updatedEntries = group.entries.map(entry => {
                 let entryPrize = 0;
-                let winningPosition: '1er' | '2do' | '3er' | undefined = undefined;
+                let winningPosition: Entry['winningPosition'];
                 let status: 'pending' | 'winner' | 'loser' = 'pending';
 
                 if (draw && draw.results && draw.results.length === 3) {
@@ -687,11 +758,7 @@ export const useStore = create<AppState>()(
         
         const totalCapitalInjection = users.reduce((sum, u) => sum + (u.capitalInjection || 0), 0);
 
-        // Utility Base = Total Sales - Total Commission
-        const utilityBase = totalSales - totalCommission;
-        // Utility Final = Utility Base - Total Prizes + Capital Injection
-        // (Prizes are deducted from utility, commission is untouched, injections are added)
-        const utility = Number((utilityBase - totalPrizes + totalCapitalInjection).toFixed(2));
+        const utility = Number(((totalSales - totalCommission) - totalPrizes + totalCapitalInjection).toFixed(2));
 
         return {
           totalSales,
@@ -703,28 +770,59 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'lottopro-storage',
-      partialize: (state) => ({ 
+      name: 'lottopro-v2-storage',
+      partialize: (state) => ({
         draws: state.draws,
-        tickets: state.tickets.slice(0, 600),
-        users: state.users,
         settings: state.settings,
         nextTicketSequence: state.nextTicketSequence,
-        currentPage: state.currentPage,
-        currentUser: state.currentUser,
-        lastTicketsSyncAt: state.lastTicketsSyncAt,
-        ticketsOwnerId: state.ticketsOwnerId,
-        lastSelectedDrawId: state.lastSelectedDrawId
+        lastSelectedDrawId: state.lastSelectedDrawId,
       }),
       merge: (persistedState: any, currentState: AppState) => {
         if (!persistedState) return currentState;
-        const { draws, tickets, users, ...rest } = persistedState;
-        
+
+        const { draws, tickets, users: _persistedUsers, currentUser: _persistedCurrentUser, ticketsOwnerId: _persistedTicketsOwnerId, ...rest } = persistedState;
+
+        const legacyDefaultDraws = new Map([
+          ['anguila-11am', { name: 'Anguila 11am', drawTime: '11:00' }],
+          ['anguila-6pm', { name: 'Anguila 6pm', drawTime: '18:00' }],
+        ]);
+        const isUntouchedLegacySeed = Array.isArray(draws) && draws.length === legacyDefaultDraws.size && draws.every((draw: Draw) => {
+          const legacyDraw = legacyDefaultDraws.get(draw.id);
+          return legacyDraw && draw.name === legacyDraw.name && draw.drawTime === legacyDraw.drawTime && draw.createdBy === 'system' && draw.updatedBy === 'system';
+        });
+        const legacyDrawIds = new Set(legacyDefaultDraws.keys());
+        const hasLegacyDrawTickets = (tickets || []).some((ticket: Ticket) =>
+          legacyDrawIds.has(ticket.drawId || '') ||
+          (ticket.drawIds || []).some((drawId) => legacyDrawIds.has(drawId)) ||
+          (ticket.drawEntries || []).some((group) => legacyDrawIds.has(group.drawId))
+        );
+        const drawsToMigrate = isUntouchedLegacySeed && !hasLegacyDrawTickets
+          ? defaultDraws
+          : Array.isArray(draws) ? draws : currentState.draws;
+        const persistedDraws = drawsToMigrate.map((draw: Draw) => {
+          const drawTimeSort = typeof draw.drawTimeSort === 'number'
+            ? draw.drawTimeSort
+            : draw.drawTime.split(':').map(Number).reduce((hours, value, index) => hours + value * (index === 0 ? 60 : 1), 0);
+          const closeTimeSort = (drawTimeSort - 3 + 1440) % 1440;
+          const closeTime = `${Math.floor(closeTimeSort / 60).toString().padStart(2, '0')}:${(closeTimeSort % 60).toString().padStart(2, '0')}`;
+          return draw.closeTimeSort === closeTimeSort && draw.closeTime === closeTime
+            ? draw
+            : { ...draw, closeTime, closeTimeSort };
+        });
+
+        // --- Start of migration logic ---
+        const migratedChancePrices = (rest.settings?.chancePrices || []).map((price: any) => {
+          if (!price.payouts) {
+            return { ...price, payouts: defaultPayouts };
+          }
+          return price;
+        });
+
         return {
           ...currentState,
-          draws: Array.isArray(draws) ? draws : currentState.draws,
-          tickets: Array.isArray(tickets) ? tickets : currentState.tickets,
-          users: Array.isArray(users) ? users : currentState.users,
+          draws: persistedDraws,
+          tickets: currentState.tickets,
+          users: currentState.users,
           ...rest,
           settings: {
             ...currentState.settings,
@@ -736,11 +834,13 @@ export const useStore = create<AppState>()(
             billete: {
               ...currentState.settings.billete,
               ...(rest.settings?.billete || {})
-            }
+            },
+            chancePrices: Array.isArray(migratedChancePrices) && migratedChancePrices.length > 0 
+              ? migratedChancePrices 
+              : currentState.settings.chancePrices,
           }
         };
       }
     }
   )
 );
-

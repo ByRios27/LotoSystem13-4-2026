@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, ArrowRight, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { UserPlus, ArrowRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Entry } from '../../store/useStore';
 import { formatCurrency, formatPlayNumberForDisplay } from '../../utils/helpers';
@@ -53,113 +54,111 @@ export const SaleCustomerModal: React.FC<SaleCustomerModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (isSubmitting || isConfirming) return;
-
     setIsConfirming(true);
     try {
       await onConfirm(name.trim());
-      setName('');
     } finally {
       setIsConfirming(false);
     }
   };
+  
+  const loading = isSubmitting || isConfirming;
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-[#121A2B] w-full max-w-sm rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden"
-        >
-          <div className="p-6 max-h-[85vh] overflow-y-auto no-scrollbar">
-            <div className="flex justify-between items-center mb-5">
-              <div className="flex items-center gap-3">
-                <div className="bg-brand-primary/20 p-2 rounded-xl">
-                  <User size={20} className="text-brand-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-tight">Confirmar Ticket</h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Nombre + previsualizacion</p>
-                </div>
-              </div>
-              <button onClick={onClose} disabled={isSubmitting || isConfirming} className="text-slate-500 hover:text-white transition-colors disabled:opacity-40">
-                <X size={20} />
-              </button>
+    createPortal(<AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center overflow-y-auto p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 bg-black/80 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+            className="bg-[#0B1220] w-full max-w-sm max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom))] sm:max-h-[90dvh] rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative flex flex-col"
+          >
+            <div className="shrink-0 p-4 sm:p-5 flex flex-col items-center justify-center text-center bg-brand-primary/10 border-b border-brand-primary/20">
+                <UserPlus size={40} className="text-brand-primary mb-3"/>
+                <h3 className="text-lg font-black text-white">{isEditing ? 'Actualizar Venta' : 'Finalizar Venta'}</h3>
+                <p className="text-xs text-slate-300 font-medium max-w-[300px]">Revisa los detalles y asigna un cliente antes de confirmar.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre del cliente (opcional)</label>
-                <div className="relative">
-                  <input
-                    autoFocus
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Ej: Juan Perez"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Previsualizacion del ticket</p>
-                  <p className="text-[10px] font-black text-brand-primary uppercase tracking-widest">{totalLines} lineas</p>
+            <div className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain no-scrollbar">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Nombre del Cliente (Opcional)</label>
+                  <div className="relative">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Cliente General"
+                      className="w-full bg-black/20 border-2 border-white/10 rounded-xl px-4 py-3.5 text-white font-bold placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-all"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2 max-h-[260px] overflow-y-auto no-scrollbar pr-1">
-                  {previewGroups.map((group) => (
-                    <div key={group.drawId} className="bg-[#0B1220] border border-white/5 rounded-xl p-2.5 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-black text-white uppercase tracking-wider">{group.drawName}</p>
-                        <p className="text-[9px] font-black text-brand-primary">${formatCurrency(group.subtotal)}</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        {group.entries.map((entry, idx) => (
-                          <div key={`${group.drawId}-${entry.id || idx}`} className="flex items-center justify-between text-[10px]">
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-white tracking-widest">{formatPlayNumberForDisplay(entry.number, entry.type)}</span>
-                              <span className="font-bold text-slate-500 uppercase">{getEntryTypeAbbr(entry.type)}</span>
+                <div className="bg-black/20 p-3 rounded-2xl border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Resumen del Ticket</p>
+                    <p className="text-xs font-bold text-brand-primary uppercase tracking-wider">{totalLines} Jugadas</p>
+                  </div>
+
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto no-scrollbar pr-1">
+                    {previewGroups.map((group) => (
+                      <div key={group.drawId} className="bg-[#0B1220] border border-white/5 rounded-xl p-2.5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-black text-white uppercase tracking-wider">{group.drawName}</p>
+                          <p className="text-xs font-black text-brand-primary">${formatCurrency(group.subtotal)}</p>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          {group.entries.map((entry, idx) => (
+                            <div key={`${group.drawId}-${entry.id || idx}`} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white tracking-widest">{formatPlayNumberForDisplay(entry.number, entry.type)}</span>
+                                <span className="font-semibold text-slate-500 uppercase">{getEntryTypeAbbr(entry.type)}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-slate-400">x{entry.pieces}</span>
+                                <span className="font-bold text-slate-200 w-12 text-right">${formatCurrency(entry.amount)}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="font-black text-slate-300">x{entry.pieces}</span>
-                              <span className="font-black text-brand-primary">${formatCurrency(entry.amount)}</span>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between border-t-2 border-white/5 pt-3 mt-2">
+                    <p className="text-sm font-bold text-slate-300 uppercase tracking-wider">Total General</p>
+                    <p className="text-lg font-black text-brand-primary">${formatCurrency(totalAmount)}</p>
+                  </div>
                 </div>
+              </form>
+            </div>
+            
+            <div className="shrink-0 p-4 bg-black/20 border-t border-white/5 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <button
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="w-full bg-brand-primary text-black h-12 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40"
+                >
+                    {loading ? 'Procesando...' : (isEditing ? 'Confirmar Cambios' : 'Registrar Venta')}
+                    {!loading && <ArrowRight size={18} />}
+                </button>
+            </div>
 
-                <div className="flex items-center justify-between border-t border-white/10 pt-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</p>
-                  <p className="text-sm font-black text-brand-primary">${formatCurrency(totalAmount)}</p>
-                </div>
-              </div>
-
-              <div className="bg-white/5 p-3 rounded-2xl border border-white/5">
-                <p className="text-[9px] text-slate-400 font-medium leading-relaxed">
-                  Si se deja vacio, el sistema asignara automaticamente <span className="text-brand-primary font-bold">CLIENTE GENERAL</span> con una secuencia unica.
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting || isConfirming}
-                className="w-full bg-brand-primary text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-brand-primary/20 active:scale-[0.98] transition-all"
-              >
-                {(isSubmitting || isConfirming) ? 'Procesando...' : (isEditing ? 'Confirmar Actualizacion' : 'Confirmar Venta')}
-                <ArrowRight size={18} />
-              </button>
-            </form>
-          </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+            <div className="absolute top-3 right-3">
+                <button
+                    onClick={onClose}
+                    disabled={loading}
+                    className="w-8 h-8 bg-black/30 text-white/70 rounded-full flex items-center justify-center backdrop-blur-sm active:bg-black/50 transition-colors disabled:opacity-30"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>, document.body)
   );
 };

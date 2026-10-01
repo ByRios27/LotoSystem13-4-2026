@@ -9,26 +9,33 @@ export const SpecialPlaysSettingsSection: React.FC = () => {
 
   return (
     <div className="space-y-6">
+        <div className="flex items-center justify-between px-2">
+            <div>
+                <h2 className="text-sm font-black text-white uppercase tracking-widest">Jugadas Especiales</h2>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Configura los pagos para Palé y Billete.</p>
+            </div>
+        </div>
+        
       <div className="flex gap-1 p-1 bg-white/5 rounded-2xl border border-white/5 mx-2">
-        <button 
+        <button
           onClick={() => setActiveSubTab('pale')}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-            activeSubTab === 'pale' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-slate-300"
+            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+            activeSubTab === 'pale' ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" : "text-slate-400 hover:text-white"
           )}
         >
-          <Zap size={14} />
-          Palé
+          <Zap size={16} />
+          Configuración de Palé
         </button>
-        <button 
+        <button
           onClick={() => setActiveSubTab('billete')}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-            activeSubTab === 'billete' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-slate-300"
+            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+            activeSubTab === 'billete' ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" : "text-slate-400 hover:text-white"
           )}
         >
-          <Ticket size={14} />
-          Billete
+          <Ticket size={16} />
+          Configuración de Billete
         </button>
       </div>
 

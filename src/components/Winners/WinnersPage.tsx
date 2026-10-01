@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useStore, Ticket } from '../../store/useStore';
 import { Trophy, Clock, User, ChevronRight, Search, Ticket as TicketIcon } from 'lucide-react';
-import { formatCurrency, getCustomerDisplayName } from '../../utils/helpers';
+import { formatCurrency, getCustomerDisplayName, sortDrawsByTime } from '../../utils/helpers';
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketModal } from '../TicketModal';
 import { calculateTicketPayoutForDraw, getEntriesForDraw, getTicketSubtotalForDraw, getWinningEntriesForDraw, normalizeTicketDrawEntries } from '../../utils/ticketUtils';
@@ -59,7 +59,12 @@ export const WinnersPage: React.FC = () => {
       });
     });
 
-    return Object.entries(grouped).sort((a, b) => b[1].totalDrawPrizes - a[1].totalDrawPrizes);
+    const orderedDraws = sortDrawsByTime(
+      Object.keys(grouped)
+        .map((drawId) => draws.find((draw) => draw.id === drawId))
+        .filter((draw): draw is NonNullable<typeof draw> => !!draw)
+    );
+    return orderedDraws.map((draw) => [draw.id, grouped[draw.id]] as const);
   }, [tickets, draws, searchTerm]);
 
   const totalWinnersCount = useMemo(() => {

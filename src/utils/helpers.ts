@@ -60,11 +60,7 @@ export function getPaleParts(number: string): [string, string] | null {
 export function formatPlayNumberForDisplay(number: string, type?: string): string {
   if (!number) return '';
   const normalizedType = (type || '').toUpperCase();
-  const isPaleType =
-    normalizedType === 'PALÉ' ||
-    normalizedType === 'PALE' ||
-    normalizedType === 'PAL\u00C3\u2030' ||
-    normalizedType === 'PAL\u00C3\u0192\u00E2\u20AC\u00B0';
+  const isPaleType = normalizedType === 'PALÉ' || normalizedType === 'PALÃ‰' || normalizedType === 'PALE';
   if (!isPaleType) return number;
 
   const paleParts = getPaleParts(number);
@@ -93,8 +89,44 @@ export function getCurrentTimeMinutes(): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
-export function sortDrawsByTime<T extends { drawTimeSort?: number }>(draws: T[]): T[] {
-  return [...draws].sort((a, b) => (a.drawTimeSort || 0) - (b.drawTimeSort || 0));
+export function sortDrawsByTime<T extends { drawTimeSort?: number; drawTime?: string }>(draws: T[]): T[] {
+  const now = getCurrentTimeMinutes();
+
+  return [...draws].sort((a, b) => {
+    const getMinutes = (draw: T) => {
+      if (typeof draw.drawTimeSort === 'number') return draw.drawTimeSort;
+      if (!draw.drawTime) return Number.POSITIVE_INFINITY;
+      const [hours, minutes] = draw.drawTime.split(':').map(Number);
+      return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : Number.POSITIVE_INFINITY;
+    };
+    const aMinutes = getMinutes(a);
+    const bMinutes = getMinutes(b);
+
+    if (!Number.isFinite(aMinutes)) return Number.isFinite(bMinutes) ? 1 : 0;
+    if (!Number.isFinite(bMinutes)) return -1;
+
+    const getDistanceFromNow = (minutes: number) => {
+      const delta = minutes - now;
+      return delta < 0 ? delta + 24 * 60 : delta;
+    };
+
+    return getDistanceFromNow(aMinutes) - getDistanceFromNow(bMinutes) || aMinutes - bMinutes;
+  });
+}
+
+export function sortDrawsChronologically<T extends { drawTimeSort?: number; drawTime?: string }>(draws: T[]): T[] {
+  const getMinutes = (draw: T) => {
+    if (typeof draw.drawTimeSort === 'number') return draw.drawTimeSort;
+    if (!draw.drawTime) return Number.POSITIVE_INFINITY;
+    const [hours, minutes] = draw.drawTime.split(':').map(Number);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : Number.POSITIVE_INFINITY;
+  };
+
+  return [...draws].sort((a, b) => getMinutes(a) - getMinutes(b));
+}
+
+export function sortDrawsByScheduleDescending<T extends { drawTimeSort?: number; drawTime?: string }>(draws: T[]): T[] {
+  return sortDrawsChronologically(draws).reverse();
 }
 
 export function toCents(amount: number): number {

@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Layers,
   FileText,
-  Clock
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 
 interface DetailProps {
@@ -28,6 +29,7 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
   const [currentPage, setCurrentPage] = useState(1);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [ticketToDelete, setTicketToDelete] = useState<string | null>(null);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
   const itemsPerPage = 5;
   
   const draws = useStore(state => state.draws);
@@ -39,7 +41,6 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
     return calculateEntryPrize(entry, draw, settings);
   };
 
-  // Prepare tickets with calculated total prizes FOR THIS SPECIFIC DRAW
   const ticketsWithPrizes = useMemo(() => {
     return tickets.map(t => {
       const draw = draws.find(d => d.id === drawId);
@@ -51,7 +52,6 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
     });
   }, [tickets, drawId, draws, settings]);
 
-  // Sort tickets if it's a loss: Winners first (by prize amount desc), then non-winners
   const hasDrawResults = useMemo(() => {
     const draw = draws.find((d) => d.id === drawId);
     return !!(draw?.results && draw.results.length === 3);
@@ -105,6 +105,9 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
       try {
         await deleteTicket(ticketToDelete);
         setTicketToDelete(null);
+        setIsPinModalOpen(false);
+        setShowDeleteSuccess(true);
+        window.setTimeout(() => setShowDeleteSuccess(false), 2500);
       } catch (error) {
         console.error('Ticket delete failed', error);
         alert('No se pudo eliminar el ticket.');
@@ -114,7 +117,12 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
 
   return (
     <div className="mt-2 space-y-1.5">
-      {/* Pagination Controls */}
+      {showDeleteSuccess && (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-300">
+          <CheckCircle2 size={14} />
+          Venta eliminada correctamente.
+        </div>
+      )}
       {totalPages > 1 && (
         <div className="flex items-center justify-between bg-[#0B1220]/50 p-1 rounded-xl border border-white/5 mb-2">
           <button 
@@ -144,7 +152,6 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
         </div>
       )}
 
-      {/* Tickets List */}
       <div className="space-y-1.5">
         {currentTickets.map((ticket) => {
           const hasPrize = ticket.calculatedTotalPrize > 0;
@@ -154,10 +161,9 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
               key={ticket.id} 
               className={cn(
                 "bg-[#121A2B] rounded-[0.9rem] border p-2 shadow-lg relative overflow-hidden group transition-all",
-                hasPrize ? "border-brand-primary/40" : "border-white/5"
+                hasPrize ? "bg-red-900/20 border-red-500/30" : "border-white/5"
               )}
             >
-              {/* Ticket Header */}
               <div className="flex justify-between items-start mb-1">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <h3 className="text-[10px] font-bold text-white/95 tracking-tight leading-none uppercase truncate max-w-[160px]">
@@ -185,14 +191,13 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                       </p>
                     )}
                     {hasPrize && (
-                    <p className="text-[7px] font-semibold text-brand-primary mt-0.5 uppercase tracking-tighter">
+                    <p className="text-[7px] font-semibold text-red-400 mt-0.5 uppercase tracking-tighter">
                       GANÓ: ${formatCurrency(ticket.calculatedTotalPrize)}
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* Icons Row */}
               <div className="flex gap-1.5 mb-1.5">
                 <button onClick={() => onShare(ticket)} className="w-5 h-5 rounded-md bg-white/5 flex items-center justify-center text-slate-400 active:text-brand-primary active:bg-brand-primary/10 transition-all">
                   <Share2 size={10} />
@@ -200,7 +205,6 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                 <button onClick={() => handleReuse(ticket)} className="w-5 h-5 rounded-md bg-white/5 flex items-center justify-center text-slate-400 active:text-brand-primary active:bg-brand-primary/10 transition-all">
                   <RefreshCw size={10} />
                 </button>
-                {/* Only allow edit and delete if no draw in the ticket is closed */}
                 {(!ticket.drawIds || !ticket.drawIds.some(id => {
                   const d = useStore.getState().draws.find(d => d.id === id);
                   return d ? getDrawStatus(d) === 'closed' : true;
@@ -216,7 +220,6 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                 )}
               </div>
 
-              {/* Time and TX */}
               <div className="flex items-center justify-between mb-1.5 opacity-70">
                 <div className="flex items-center gap-1 text-slate-400">
                   <Clock size={7} className="text-brand-primary" />
@@ -229,7 +232,6 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                 </p>
               </div>
 
-              {/* Plays List */}
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {getEntriesForDraw(ticket, drawId).map((entry, idx) => {
                   const { prize: entryPrizeInDraw } = calculateEntryPrizeForDraw(entry, drawId);
@@ -239,14 +241,14 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                     <div key={idx} className="min-w-[82px] py-0.5 leading-none">
                       <p className={cn(
                         "text-[10px] font-semibold tracking-tight",
-                        isWinner ? "text-brand-primary" : "text-white/90"
+                        isWinner ? "text-red-400" : "text-white/90"
                       )}>
                         {formatPlayNumberForDisplay(entry.number, entry.type)} x{entry.pieces}
                       </p>
                       <div className="text-[7px] font-medium text-slate-300 mt-0.5">
                         ${formatCurrency(entry.amount)}
                         {isWinner && (
-                          <span className="text-brand-primary font-semibold ml-1">+{formatCurrency(entryPrizeInDraw)}</span>
+                          <span className="text-red-400 font-semibold ml-1">+{formatCurrency(entryPrizeInDraw)}</span>
                         )}
                       </div>
                     </div>
@@ -280,5 +282,3 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
     </div>
   );
 };
-
-

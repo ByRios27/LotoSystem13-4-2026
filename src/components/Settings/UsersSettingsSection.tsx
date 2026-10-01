@@ -1,216 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import { useStore, User, UserRole } from '../../store/useStore';
-import { Plus, Edit2, Trash2, User as UserIcon, Shield, Percent, ToggleLeft, ToggleRight, AlertCircle, TrendingUp } from 'lucide-react';
-import { cn, generateSellerId } from '../../utils/helpers';
-import { PermissionGuard } from './PermissionGuard';
-import { PinValidationModal } from '../PinValidationModal';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useStore, User } from '../../store/useStore';
+import { collection, doc, setDoc, deleteDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { db, auth, firebaseConfig } from '../../firebase';
+import { createUserWithEmailAndPassword, signOut, initializeAuth, inMemoryPersistence } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { createUserWithEmailAndPassword, inMemoryPersistence, initializeAuth, signOut } from 'firebase/auth';
-import firebaseConfig from '../../../firebase-applet-config.json';
+import { motion, AnimatePresence } from 'framer-motion';
+import { UserPlus, Users, Trash2, Edit, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { generateSellerId } from '../../utils/helpers';
+import { PinValidationModal } from '../PinValidationModal';
 
-export const UsersSettingsSection: React.FC = () => {
-  const { users, addUser, updateUser, deleteUser, currentUser } = useStore();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
-  const handleOpenModal = (user?: User) => {
-    setEditingUser(user || null);
-    setIsModalOpen(true);
-  };
+const ROLES: User['role'][] = ['seller', 'leader'];
 
-  const handleDeleteClick = (id: string) => {
-    setUserToDelete(id);
-    setIsPinModalOpen(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (userToDelete) {
-      deleteUser(userToDelete);
-      setUserToDelete(null);
-    }
-  };
-
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [injectionAmount, setInjectionAmount] = useState('');
-
-  const handleSaveInjection = () => {
-    if (!selectedUserId || !injectionAmount) return;
-    const amount = parseFloat(injectionAmount);
-    if (isNaN(amount) || amount <= 0) return;
-
-    // Check both users list and currentUser
-    const user = users.find(u => u.id === selectedUserId) || (currentUser?.id === selectedUserId ? currentUser : null);
-    
-    if (user) {
-      const currentInjection = user.capitalInjection || 0;
-      updateUser(user.id, { capitalInjection: currentInjection + amount });
-      setInjectionAmount('');
-      setSelectedUserId('');
-    }
-  };
-
-  // Combine users list with currentUser to ensure current user is always selectable
-  const allSelectableUsers = useMemo(() => {
-    const list = [...users];
-    if (currentUser && !list.find(u => u.id === currentUser.id)) {
-      list.push(currentUser);
-    }
-    return list;
-  }, [users, currentUser]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-        <div>
-          <h2 className="text-sm font-black text-white uppercase tracking-widest">Gestión de Usuarios</h2>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Administra roles y comisiones</p>
-        </div>
-        <PermissionGuard allowedRoles={['CEO']}>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="bg-brand-primary text-white p-2 rounded-xl shadow-lg shadow-brand-primary/20 active:scale-95 transition-transform"
-          >
-            <Plus size={20} />
-          </button>
-        </PermissionGuard>
-      </div>
-
-      {/* Capital Injection Section */}
-      <PermissionGuard allowedRoles={['CEO']}>
-        <div className="bg-[#121A2B] rounded-2xl border border-brand-primary/20 p-4 space-y-3 mx-2">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp size={14} className="text-brand-primary" />
-            <h3 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">I. Capital (Inyección)</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <select 
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-bold text-white outline-none focus:border-brand-primary/50 transition-colors appearance-none"
-            >
-              <option value="">Seleccionar Usuario</option>
-              {allSelectableUsers.map(u => (
-                <option key={u.id} value={u.id}>
-                  {u.name} (@{u.username}) {u.id === currentUser?.id ? '(Mí mismo)' : ''}
-                </option>
-              ))}
-            </select>
-            <input 
-              type="number"
-              value={injectionAmount}
-              onChange={(e) => setInjectionAmount(e.target.value)}
-              placeholder="Monto $"
-              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-bold text-white outline-none focus:border-brand-primary/50 transition-colors"
-            />
-          </div>
-          <button 
-            onClick={handleSaveInjection}
-            disabled={!selectedUserId || !injectionAmount}
-            className="w-full py-2.5 bg-brand-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
-          >
-            Guardar Inyección
-          </button>
-        </div>
-      </PermissionGuard>
-
-      <div className="space-y-2">
-        {users.map((user) => (
-          <motion.div 
-            layout
-            key={user.id} 
-            className={cn(
-              "bg-[#121A2B] rounded-2xl border p-4 flex items-center justify-between transition-all",
-              user.status === 'active' ? "border-white/5" : "border-red-500/20 opacity-70"
-            )}
-          >
-            <div className="flex items-center gap-4">
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center",
-                user.role === 'CEO' ? "bg-brand-primary/10 text-brand-primary" : "bg-slate-800 text-slate-400"
-              )}>
-                <UserIcon size={20} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="font-black text-sm text-white tracking-tight">{user.name}</h4>
-                  <span className={cn(
-                    "px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest rounded border",
-                    user.role === 'CEO' ? "bg-brand-primary/20 text-brand-primary border-brand-primary/20" : "bg-slate-800 text-slate-500 border-white/5"
-                  )}>
-                    {user.role}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">@{user.username}</p>
-                  <div className="flex items-center gap-1 text-brand-primary">
-                    <Percent size={10} />
-                    <p className="text-[9px] font-black uppercase tracking-widest">{(user.commission * 100).toFixed(0)}%</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <PermissionGuard allowedRoles={['CEO']}>
-                <button 
-                  onClick={() => updateUser(user.id, { status: user.status === 'active' ? 'inactive' : 'active' })}
-                  className={cn("p-2 transition-all active:scale-90", user.status === 'active' ? "text-brand-primary" : "text-slate-700")}
-                >
-                  {user.status === 'active' ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-                </button>
-                <button 
-                  onClick={() => handleOpenModal(user)}
-                  className="p-2 text-slate-500 hover:text-white transition-colors"
-                >
-                  <Edit2 size={18} />
-                </button>
-                {user.role !== 'CEO' && (
-                  <button 
-                    onClick={() => handleDeleteClick(user.id)}
-                    className="p-2 text-slate-700 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </PermissionGuard>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <AnimatePresence>
-        {isModalOpen && (
-          <UserFormModal 
-            user={editingUser} 
-            onClose={() => setIsModalOpen(false)} 
-          />
-        )}
-      </AnimatePresence>
-
-      <PinValidationModal 
-        isOpen={isPinModalOpen}
-        onClose={() => {
-          setIsPinModalOpen(false);
-          setUserToDelete(null);
-        }}
-        onSuccess={handleConfirmDelete}
-        title="Eliminar Usuario"
-        description="Confirma tu PIN para eliminar este usuario."
-      />
-    </div>
-  );
-};
-
-interface ModalProps {
-  user: User | null;
-  onClose: () => void;
-}
-
-async function createLoginAccount(email: string, password: string): Promise<string> {
+async function createLoginAccount(username: string, password: string): Promise<string> {
+  const email = `${username.toLowerCase().trim()}@lottopro.system`;
   const appName = `lottopro-user-provision-${Date.now()}`;
+  
   const secondaryApp = initializeApp(firebaseConfig as any, appName);
   const secondaryAuth = initializeAuth(secondaryApp, { persistence: inMemoryPersistence });
 
@@ -223,225 +28,218 @@ async function createLoginAccount(email: string, password: string): Promise<stri
   }
 }
 
-const UserFormModal: React.FC<ModalProps> = ({ user, onClose }) => {
-  const { addUser, updateUser } = useStore();
-  const [name, setName] = useState(user?.name || '');
-  const [username, setUsername] = useState(user?.username || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [role, setRole] = useState<UserRole>(user?.role || 'VENDEDOR');
-  const [commission, setCommission] = useState(user?.commission ? (user.commission * 100).toString() : '20');
-  const [sellerId, setSellerId] = useState(user?.sellerId || generateSellerId());
-  const [pin, setPin] = useState(user?.pin || '');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => {
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [pin, setPin] = useState('');
+  const [commission, setCommission] = useState(0.25);
+  const [role, setRole] = useState<User['role']>('seller');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [password, setPassword] = useState('123456');
+
+  const users = useStore((state) => state.users);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError(null);
 
-    if (!name.trim()) {
-      setError('El nombre es obligatorio');
+    if (users.some(u => u.username.toLowerCase() === username.toLowerCase().trim())) {
+      setError('El nombre de usuario ya existe.');
       return;
     }
-    if (!username.trim()) {
-      setError('El usuario es obligatorio');
-      return;
-    }
-    if (!pin.trim()) {
-      setError('El PIN interno es obligatorio');
-      return;
-    }
-
-    if (!user) {
-      if (!email.trim()) {
-        setError('El correo electrónico es obligatorio para crear login.');
+    if (pin.length !== 4 || !/^\d+$/.test(pin)) {
+        setError('El PIN debe contener exactamente 4 números.');
         return;
-      }
-      if (!loginPassword.trim() || loginPassword.trim().length < 6) {
-        setError('La contraseña de login debe tener al menos 6 caracteres.');
-        return;
-      }
+    }
+    if (!password || password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
     }
 
-    const commissionValue = parseFloat(commission) / 100;
-    setIsSaving(true);
-
+    setLoading(true);
     try {
-      if (user) {
-        updateUser(user.id, { name, username, email, role, commission: commissionValue, sellerId, pin });
-      } else {
-        const uid = await createLoginAccount(email.trim(), loginPassword.trim());
-        addUser({
-          id: uid,
-          name,
-          username,
-          email: email.trim(),
-          role,
-          status: 'active',
-          commission: commissionValue,
-          sellerId,
-          pin,
-        });
-      }
-      onClose();
+      const newUserId = await createLoginAccount(username, password);
+      
+      const newUser: User = {
+        id: newUserId,
+        name: name.trim(),
+        username: username.toLowerCase().trim(),
+        email: `${username.toLowerCase().trim()}@lottopro.system`,
+        pin,
+        commission,
+        role,
+        status: 'active',
+        sellerId: generateSellerId(),
+        createdAt: Timestamp.now(),
+      };
+
+      await setDoc(doc(db, 'users', newUserId), newUser);
+      onUserAdded();
     } catch (err: any) {
-      if (err?.code === 'auth/email-already-in-use') {
-        setError('Ese correo ya está registrado para login.');
-      } else if (err?.code === 'auth/invalid-email') {
-        setError('Correo inválido.');
-      } else if (err?.code === 'auth/weak-password') {
-        setError('La contraseña de login es demasiado débil.');
+      console.error('Error creating user:', err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Este nombre de usuario ya está registrado en el sistema de autenticación.');
+      } else if (err.message) {
+        setError(err.message);
       } else {
-        setError('No se pudo crear el login del usuario.');
+        setError('Ocurrió un error desconocido al crear el usuario.');
       }
     } finally {
-      setIsSaving(false);
+      setLoading(false);
     }
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/80 backdrop-blur-sm"
-    >
-      <motion.div 
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.9, y: 20 }}
-        className="bg-[#121A2B] w-full max-w-sm rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden"
-      >
-        <div className="p-6">
-          <h3 className="text-lg font-black text-white mb-1 uppercase tracking-tight">
-            {user ? 'Editar Usuario' : 'Nuevo Usuario'}
-          </h3>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-6">
-            Configura acceso y comisión
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Nombre Completo</label>
-              <input 
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ej. Juan Pérez"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Correo Electrónico</label>
-              <input 
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@correo.com"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Usuario / Login</label>
-              <input 
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ej. jperez123"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">ID Vendedor</label>
-                <input 
-                  type="text"
-                  value={sellerId}
-                  onChange={(e) => setSellerId(e.target.value)}
-                  placeholder="Ej. 9584"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">PIN Interno</label>
-                <input 
-                  type="password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-                />
-              </div>
-            </div>
-
-            {!user && (
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Contraseña Login</label>
-                <input 
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-                />
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Rol</label>
-                <select 
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors appearance-none"
-                >
-                  <option value="CEO">CEO</option>
-                  <option value="VENDEDOR">Vendedor</option>
-                  <option value="USUARIO">Usuario</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Comisión (%)</label>
-                <input 
-                  type="number"
-                  value={commission}
-                  onChange={(e) => setCommission(e.target.value)}
-                  placeholder="20"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-brand-primary/50 transition-colors"
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 text-red-500 bg-red-500/10 p-3 rounded-xl border border-red-500/20">
-                <AlertCircle size={14} />
-                <p className="text-[10px] font-bold uppercase tracking-tighter">{error}</p>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-2">
-              <button 
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-400 bg-white/5 active:scale-95 transition-all"
-              >
-                Cancelar
-              </button>
-              <button 
-                type="submit"
-                disabled={isSaving}
-                className="flex-1 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest text-white bg-brand-primary shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
-              >
-                {isSaving ? 'Guardando...' : (user ? 'Actualizar' : 'Crear')}
-              </button>
-            </div>
-          </form>
+    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 overflow-hidden">
+      <form onSubmit={handleCreateUser} className="space-y-4">
+        <h3 className="font-bold text-lg text-white mb-2">Añadir Nuevo Usuario</h3>
+        {error && <p className="text-red-500 text-sm bg-red-500/10 p-3 rounded-lg">{error}</p>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="text" placeholder="Nombre Completo" value={name} onChange={e => setName(e.target.value)} required className="input" />
+            <input type="text" placeholder="Nombre de Usuario" value={username} onChange={e => setUsername(e.target.value)} required className="input" />
+            <input type="text" placeholder="PIN (4 dígitos)" value={pin} onChange={e => setPin(e.target.value)} required className="input" maxLength={4} />
+            <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} required className="input" />
+            <select value={role} onChange={e => setRole(e.target.value as User['role'])} className="input">
+                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+            </select>
+            <input type="number" step="0.01" min="0" max="1" placeholder="Comisión (ej: 0.25)" value={commission} onChange={e => setCommission(parseFloat(e.target.value))} required className="input" />
         </div>
-      </motion.div>
+        <div className="flex justify-end gap-4">
+          <button type="submit" disabled={loading} className="button-primary">
+            {loading ? 'Creando...' : 'Crear Usuario'}
+          </button>
+          <button type="button" onClick={onUserAdded} className="button-secondary">Cancelar</button>
+        </div>
+      </form>
     </motion.div>
+  );
+};
+
+
+export const UsersSettingsSection = () => {
+  const currentUser = useStore((state) => state.currentUser);
+  const users = useStore((state) => state.users);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+
+  if (currentUser?.role !== 'CEO') return null;
+
+  const sortedUsers = [...users].sort((a, b) => a.username.localeCompare(b.username));
+
+  const handleUpdateUser = async (user: User) => {
+    if (!editingUser) return;
+    try {
+        const userRef = doc(db, "users", user.id);
+        await updateDoc(userRef, {
+            name: user.name,
+            pin: user.pin,
+            commission: user.commission,
+            role: user.role,
+            status: user.status
+        });
+        setEditingUser(null);
+    } catch (error) {
+        console.error("Error updating user: ", error);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    // Note: This only deletes from Firestore. The Auth user remains.
+    // A proper implementation would use a Cloud Function to delete the user from Auth.
+    try {
+      await deleteDoc(doc(db, "users", userId));
+      setConfirmDelete(null); // Close confirmation
+    } catch (error) {
+      console.error("Error deleting user: ", error);
+    }
+  };
+
+  const toggleUserStatus = async (user: User) => {
+    const newStatus = user.status === 'active' ? 'inactive' : 'active';
+    try {
+        const userRef = doc(db, "users", user.id);
+        await updateDoc(userRef, { status: newStatus });
+    } catch (error) {
+        console.error("Error toggling user status: ", error);
+    }
+  }
+
+  return (
+    <div className="settings-section">
+      <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Users size={20}/> Gestión de Usuarios</h2>
+      
+      {!isAddingUser && (
+        <button onClick={() => setIsAddingUser(true)} className="button-primary inline-flex items-center gap-2 mb-4">
+          <UserPlus size={18}/>
+          Añadir Usuario
+        </button>
+      )}
+
+      <AnimatePresence>
+        {isAddingUser && <AddUserForm onUserAdded={() => setIsAddingUser(false)} />}
+      </AnimatePresence>
+
+      <div className="mt-6 space-y-2">
+        {sortedUsers.filter(u => u.id !== currentUser.id).map(user => (
+             <div key={user.id} className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+                {editingUser?.id === user.id ? (
+                    // Editing View
+                    <div className="space-y-3">
+                        <input value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})} className="input"/>
+                        <input value={editingUser.pin} onChange={e => setEditingUser({...editingUser, pin: e.target.value})} className="input" maxLength={4}/>
+                        <input type="number" value={editingUser.commission} onChange={e => setEditingUser({...editingUser, commission: parseFloat(e.target.value)})} className="input"/>
+                        <select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as User['role']})} className="input">
+                            {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                        </select>
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => handleUpdateUser(editingUser)} className="button-primary">Guardar</button>
+                            <button onClick={() => setEditingUser(null)} className="button-secondary">Cancelar</button>
+                        </div>
+                    </div>
+                ) : (
+                    // Default View
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-bold text-white">{user.name} <span className="text-xs font-mono text-slate-400">@{user.username}</span></p>
+                            <p className="text-xs text-slate-300">Rol: {user.role} - Comisión: {user.commission * 100}%</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                             <label className="flex items-center cursor-pointer">
+                                <div className="relative">
+                                    <input type="checkbox" checked={user.status === 'active'} onChange={() => toggleUserStatus(user)} className="sr-only peer" />
+                                    <div className="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                </div>
+                                <span className="ml-3 text-xs font-medium text-gray-300">{user.status === 'active' ? 'Activo' : 'Inactivo'}</span>
+                            </label>
+                            <button onClick={() => setEditingUser(user)} className="p-2 text-slate-400 hover:text-white"><Edit size={16}/></button>
+                            <button onClick={() => setConfirmDelete(user.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                        </div>
+                    </div>
+                )}
+                {confirmDelete === user.id && (
+                    <div className="mt-4 bg-red-900/50 border border-red-500/30 rounded-lg p-4 text-center">
+                        <p className="font-bold text-white">¿Seguro que quieres eliminar a este usuario?</p>
+                        <p className="text-xs text-red-200 mb-4">Esta acción no se puede deshacer.</p>
+                        <div className="flex justify-center gap-4">
+                            <button onClick={() => handleDeleteUser(user.id)} className="button-danger">Sí, Eliminar</button>
+                            <button onClick={() => setConfirmDelete(null)} className="button-secondary">Cancelar</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        ))}
+      </div>
+       <PinValidationModal 
+         isOpen={isPinModalOpen}
+         onClose={() => setIsPinModalOpen(false)}
+         onSuccess={() => { /* Handle success */ }}
+         title='Confirmar Acción'
+         description='Ingresa tu PIN para confirmar.'
+       />
+    </div>
   );
 };

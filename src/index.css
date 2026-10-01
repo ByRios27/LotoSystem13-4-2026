@@ -26,13 +26,40 @@
     font-family: var(--font-sans);
   }
 
-  /* Safe area padding for mobile notches */
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0.5rem);
   }
 }
 
-/* Custom Scrollbar */
+@layer components {
+  /* Keep each settings field visually grouped with its label and control. */
+  .form-group {
+    @apply relative rounded-xl border border-white/10 bg-white/5 p-3 transition-colors;
+  }
+
+  /* Label Styling */
+  .form-group > label, .form-group-inline > label {
+    @apply block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2;
+  }
+
+  /* Input fields are now VISIBLE by default */
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    @apply w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 transition-colors;
+    @apply focus:border-brand-primary/80 focus:ring-0;
+  }
+  
+  /* Special layout for inline items like toggles */
+  .form-group-inline {
+      @apply rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-all flex items-center justify-between;
+  }
+   .form-group-inline > label {
+    @apply text-xs font-bold text-white uppercase tracking-wider mb-0;
+  }
+}
+
+
 ::-webkit-scrollbar {
   width: 3px;
 }

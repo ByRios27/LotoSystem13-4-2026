@@ -5,7 +5,7 @@ import { DrawHistoryCard } from './DrawHistoryCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, Share2, Layers, Check, X, Loader2 } from 'lucide-react';
 import { TicketModal } from '../TicketModal';
-import { sortDrawsByTime, getDrawStatus, getCustomerDisplayName } from '../../utils/helpers';
+import { sortDrawsByScheduleDescending, getDrawStatus, getCustomerDisplayName } from '../../utils/helpers';
 import { PullToRefresh } from '../PullToRefresh';
 import {
   calculateTicketPayoutForDraw,
@@ -26,6 +26,8 @@ interface DrawHistoryItem {
   name: string;
   drawTime: string;
   closeTimeSort?: number;
+  resultsEnteredAt?: number;
+  updatedAt?: number;
   digitsMode: number;
   status: 'open' | 'closed';
   totalSold: number;
@@ -199,7 +201,7 @@ export const HistoryPage: React.FC = () => {
       })
       .filter((item): item is DrawHistoryItem => !!item && item.isActive);
 
-    return sortDrawsByTime(grouped);
+    return sortDrawsByScheduleDescending(grouped);
   }, [draws, sortedTicketsByDraw, activeFilter]);
 
   useEffect(() => {

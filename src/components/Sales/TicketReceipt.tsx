@@ -81,11 +81,25 @@ export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
           const drawName = group.drawName || 'Sorteo';
           const drawId = group.drawId;
           const draw = draws.find(d => d.id === drawId);
+          const drawResultsAvailable = draw?.results?.length === 3;
+          const winningEntries = drawResultsAvailable
+            ? group.entries.map((entry) => ({
+                entry,
+                outcome: calculateEntryPrizeForDraw(entry, draw),
+              }))
+            : [];
+          const drawPrize = winningEntries.reduce((sum, item) => sum + item.outcome.prize, 0);
+          const drawHasPrize = drawPrize > 0;
           
           return (
             <div key={idx} className="space-y-3">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
                 <span className="text-xs font-black text-brand-primary uppercase tracking-tight">{drawName}</span>
+                {drawHasPrize && (
+                  <span className="ml-auto text-[10px] font-black text-emerald-700 uppercase">
+                    Premio: ${formatCurrency(drawPrize)}
+                  </span>
+                )}
               </div>
               
               <table className="w-full text-left">
@@ -95,7 +109,7 @@ export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
                     <th className="pb-2 text-center">Cant</th>
                     <th className="pb-2 text-center">Tipo</th>
                     <th className="pb-2 text-right">Monto</th>
-                    {hasPrize && <th className="pb-2 text-right text-brand-primary">Premio</th>}
+                    {drawResultsAvailable && <th className="pb-2 text-right text-brand-primary">Premio</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -113,9 +127,11 @@ export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
                         <td className="py-2 font-bold text-slate-500 text-center">{entry.pieces}</td>
                         <td className="py-2 font-bold text-slate-500 text-[10px] uppercase text-center">{getEntryTypeAbbr(entry.type)}</td>
                         <td className="py-2 font-black text-right text-slate-900">${formatCurrency(entry.amount)}</td>
-                        {hasPrize && (
+                        {drawResultsAvailable && (
                           <td className="py-2 font-black text-right text-brand-primary">
-                            {entryPrizeInDraw > 0 ? `$${formatCurrency(entryPrizeInDraw)}` : '-'}
+                            {entryPrizeInDraw > 0
+                              ? `$${formatCurrency(entryPrizeInDraw)}${position ? ` (${position})` : ''}`
+                              : '-'}
                           </td>
                         )}
                       </tr>

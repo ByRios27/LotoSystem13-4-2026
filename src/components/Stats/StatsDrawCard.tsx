@@ -122,16 +122,16 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
           </motion.div>
           
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h4 className={cn("font-black text-[13px] tracking-tight leading-none", stats.isLoss ? "text-red-100" : stats.isWinnerDraw ? "text-green-100" : "text-white")}>{draw.name}</h4>
-              {getDrawStatus(draw) === 'closed' && <Lock size={10} className={stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-500/60" : "text-slate-600"} />}
+            <div className="flex items-center gap-2">
+              <h4 className={cn("font-black text-sm tracking-tight leading-none truncate", stats.isLoss ? "text-red-100" : stats.isWinnerDraw ? "text-green-100" : "text-white")}>{draw.name}</h4>
+              {getDrawStatus(draw) === 'closed' && <Lock size={10} className={cn("shrink-0", stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-500/60" : "text-slate-600")} />}
+              <p className={cn(
+                "shrink-0 text-[10px] font-bold uppercase tracking-widest leading-none",
+                stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-400/70" : "text-slate-500"
+              )}>
+                {formatAMPM(draw.drawTime)}
+              </p>
             </div>
-            <p className={cn(
-              "text-[9px] font-bold uppercase tracking-widest mt-1.5",
-              stats.isLoss ? "text-white" : stats.isWinnerDraw ? "text-green-400/70" : "text-slate-500"
-            )}>
-              {formatAMPM(draw.drawTime)}
-            </p>
           </div>
         </div>
 

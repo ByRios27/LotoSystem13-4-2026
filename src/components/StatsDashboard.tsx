@@ -1,14 +1,21 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { BarChart3, TrendingUp, Hash, CheckCircle2 } from 'lucide-react';
 import { StatsDrawCard } from './Stats/StatsDrawCard';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatCurrency, getDrawStatus } from '../utils/helpers';
+import { cn, formatCurrency, getDrawStatus } from '../utils/helpers';
 import { PullToRefresh } from './PullToRefresh';
 import { calculateTicketSalesForDraw, getEntriesForDraw } from '../utils/ticketUtils';
 
 export const StatsDashboard: React.FC = () => {
-  const { tickets, draws } = useStore();
+  const { tickets: allTickets, draws, currentUser } = useStore();
+  const isCEO = currentUser?.role === 'CEO';
+  const [showGlobal, setShowGlobal] = useState(false);
+
+  const tickets = useMemo(
+    () => (isCEO && showGlobal ? allTickets : allTickets.filter(t => t.userId === currentUser?.id)),
+    [allTickets, isCEO, showGlobal, currentUser?.id]
+  );
 
   const stats = useMemo(() => {
     const pricePerTime = useStore.getState().settings.pricePerTime || 1;
@@ -62,7 +69,24 @@ export const StatsDashboard: React.FC = () => {
   }, [tickets, draws]);
 
   return (
-    <div className="flex flex-col h-full bg-[#0B1220] text-white select-none overflow-hidden">
+    <div className="relative flex flex-col h-full bg-[#0B1220] text-white select-none overflow-hidden">
+      {isCEO && (
+        <div className="absolute top-1 right-3 z-10 flex rounded-md border border-white/10 bg-[#0B1220]/90 p-px">
+          {[{ id: false, label: 'Local' }, { id: true, label: 'Global' }].map(opt => (
+            <button
+              key={opt.label}
+              type="button"
+              onClick={() => setShowGlobal(opt.id)}
+              className={cn(
+                'px-1.5 h-3.5 rounded text-[8px] font-black uppercase tracking-widest leading-none transition-colors',
+                showGlobal === opt.id ? 'bg-white/15 text-white' : 'text-slate-500'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
       <PullToRefresh 
         onRefresh={async () => { window.location.reload(); }}
         className="flex-1 px-3 py-4 pb-24"

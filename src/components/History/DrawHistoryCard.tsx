@@ -51,28 +51,28 @@ export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggl
           </motion.div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-2">
               <h4
                 className={cn(
-                  'min-w-0 truncate whitespace-nowrap font-black text-xs tracking-tight leading-tight',
+                  'min-w-0 truncate whitespace-nowrap font-black text-[13px] tracking-tight leading-[15px]',
                   'text-white'
                 )}
               >
                 {draw.name}
               </h4>
               {getDrawStatus(draw) === 'closed' && (
-                <Lock size={9} className={'text-slate-600'} />
+                <Lock size={9} className={'text-slate-600 shrink-0'} />
               )}
-            </div>
-            <div className="flex min-w-0 items-center gap-2 mt-1 overflow-hidden whitespace-nowrap">
               <p
                 className={cn(
-                  'shrink-0 text-[9px] font-bold uppercase tracking-wide',
+                  'shrink-0 text-[10px] font-bold uppercase tracking-wide',
                   prizesExceedSales ? 'text-white' : 'text-slate-400'
                 )}
               >
                 {formatAMPM(draw.drawTime)}
               </p>
+            </div>
+            <div className="flex min-w-0 items-center gap-2 mt-1 min-h-[13.5px] overflow-hidden whitespace-nowrap">
               {draw.results && draw.results.length > 0 && (
                 <div className="flex shrink-0 gap-1">
                   {draw.results.map((res, idx) => (

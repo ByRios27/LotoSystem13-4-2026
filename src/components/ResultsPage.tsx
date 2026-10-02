@@ -307,8 +307,8 @@ export const ResultsPage: React.FC = () => {
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <p className="min-w-0 truncate whitespace-nowrap text-xs font-black text-white leading-tight" title={draw.name}>{draw.name}</p>
-                      <span className={cn("shrink-0 text-[9px] font-bold uppercase tracking-wide", prizesExceedSales ? "text-white" : "text-slate-400")}>{formatAMPM(draw.drawTime)}</span>
+                      <p className="min-w-0 truncate whitespace-nowrap text-[13px] font-black text-white leading-[15px]" title={draw.name}>{draw.name}</p>
+                      <span className={cn("shrink-0 text-[10px] font-bold uppercase tracking-wide", prizesExceedSales ? "text-white" : "text-slate-400")}>{formatAMPM(draw.drawTime)}</span>
                     </div>
                     {hasResults && (financials?.totalPrizes || 0) > 0 && (
                       <p className="shrink-0 text-[9px] font-black text-yellow-200">

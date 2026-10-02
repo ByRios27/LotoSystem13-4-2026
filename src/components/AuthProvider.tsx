@@ -8,26 +8,7 @@ import {
 import { doc, getDoc, setDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { useStore, Draw, Ticket, User } from '../store/useStore';
 import { Lock, AlertCircle, Ticket as TicketIcon, Eye, EyeOff } from 'lucide-react';
-import { generateSellerId } from '../utils/helpers';
-
-const AUTH_INIT_TIMEOUT_MS = 12000;
-const AUTH_REQUEST_TIMEOUT_MS = 20000;
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorCode: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => reject(new Error(errorCode)), timeoutMs);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timeoutId);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timeoutId);
-        reject(error);
-      },
-    );
-  });
-}
+import { generateSellerId, getBusinessDate } from '../utils/helpers';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(true);
@@ -48,30 +29,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    let initialStateResolved = false;
-    const initialStateTimeout = window.setTimeout(() => {
-      if (initialStateResolved) return;
-      initialStateResolved = true;
-      console.error('[LottoPro] auth_initialization_timeout');
-      setAuthError('No se pudo iniciar la sesión. Comprueba tu conexión e intenta de nuevo.');
-      setLoading(false);
-    }, AUTH_INIT_TIMEOUT_MS);
-
-    const resolveInitialState = () => {
-      if (initialStateResolved) return;
-      initialStateResolved = true;
-      window.clearTimeout(initialStateTimeout);
-    };
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      resolveInitialState();
+      setAuthError(null);
       if (firebaseUser) {
         setLoading(true);
-        setAuthError(null);
         
         try {
           const userRef = doc(db, 'users', firebaseUser.uid);
-          const userSnap = await withTimeout(getDoc(userRef), AUTH_INIT_TIMEOUT_MS, 'AUTH_PROFILE_TIMEOUT');
+          const userSnap = await getDoc(userRef);
           
           let userData: User | null = null;
 
@@ -106,9 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         } catch (error) {
           console.error('Auth state change error:', error);
-          setAuthError(error instanceof Error && error.message === 'AUTH_PROFILE_TIMEOUT'
-            ? 'La verificación de sesión tardó demasiado. Comprueba tu conexión e inicia sesión de nuevo.'
-            : 'No se pudo validar tu cuenta. Comprueba tu conexión o contacta al administrador.');
+          setAuthError('No se pudo validar tu cuenta. Comprueba tu conexión o contacta al administrador.');
           if (auth.currentUser) {
             void signOut(auth).catch((signOutError) => console.error('Error clearing stalled session:', signOutError));
           }
@@ -121,7 +84,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     }, (error) => {
-      resolveInitialState();
       console.error('Auth state observer error:', error);
       setAuthError('No se pudo conectar con el servicio de acceso. Comprueba tu conexión.');
       setCurrentUser(null);
@@ -129,7 +91,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
-      window.clearTimeout(initialStateTimeout);
       unsubscribe();
     };
   }, [setCurrentUser]);
@@ -142,7 +103,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     useStore.setState((state) => ({
-      tickets: state.ticketsOwnerId === currentStoreUser.id ? state.tickets : [],
+      tickets: state.ticketsOwnerId === currentStoreUser.id
+        ? state.tickets.filter((ticket) => typeof ticket.timestamp === 'number' && getBusinessDate(ticket.timestamp) === getBusinessDate())
+        : [],
       ticketsOwnerId: currentStoreUser.id,
       isTicketsRefreshing: true,
       users: currentStoreUser.role === 'CEO' ? state.users : [],
@@ -156,7 +119,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       useStore.setState((state) => {
         const mergedDraws = new Map(state.draws.map((draw) => [draw.id, draw]));
-        remoteDraws.forEach((draw) => mergedDraws.set(draw.id, { ...mergedDraws.get(draw.id), ...draw }));
+        remoteDraws.forEach((draw) => {
+          const existingDraw = mergedDraws.get(draw.id);
+          const mergedDraw = { ...existingDraw, ...draw };
+          if (!Object.prototype.hasOwnProperty.call(draw, 'results')) {
+            delete mergedDraw.results;
+            delete mergedDraw.resultsEnteredAt;
+          }
+          mergedDraws.set(draw.id, mergedDraw);
+        });
         return { draws: Array.from(mergedDraws.values()) };
       });
     }, (err) => console.error('Draws subscription error:', err));
@@ -167,6 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ticketsSub = onSnapshot(ticketsQuery, (snapshot) => {
       const tickets = snapshot.docs
         .map((ticketDoc) => ({ ...ticketDoc.data(), id: ticketDoc.id } as Ticket))
+        .filter((ticket) => typeof ticket.timestamp === 'number' && getBusinessDate(ticket.timestamp) === getBusinessDate())
         .sort((a, b) => b.timestamp - a.timestamp);
       useStore.setState({
         tickets,
@@ -230,18 +202,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         localStorage.removeItem('lottopro_remembered_email');
       }
-      await withTimeout(
-        signInWithEmailAndPassword(auth, email, password),
-        AUTH_REQUEST_TIMEOUT_MS,
-        'AUTH_LOGIN_TIMEOUT',
-      );
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       const invalidCredentials = ['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password', 'auth/invalid-email']
         .includes(error?.code);
-      setAuthError(error?.message === 'AUTH_LOGIN_TIMEOUT'
-        ? 'La conexión tardó demasiado. Comprueba internet e intenta de nuevo.'
-        : invalidCredentials
-          ? 'Usuario o contraseña incorrecta'
+      setAuthError(invalidCredentials
+        ? 'Usuario o contraseña incorrecta'
+        : error?.code === 'auth/network-request-failed'
+          ? 'No se pudo conectar con el servicio de acceso. Comprueba internet e intenta de nuevo.'
           : 'No se pudo conectar con el servicio de acceso. Intenta de nuevo.');
       setLoading(false);
     }

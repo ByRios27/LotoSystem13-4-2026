@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { releaseTicketLimits } from '../services/betService';
 import { db, auth } from '../firebase';
-import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocs, writeBatch } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { calculateEntryPrize } from '../utils/prizeCalculator';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
@@ -145,7 +145,7 @@ export interface SpecialPlay {
   type: string;
 }
 
-export type Page = 'sales' | 'history' | 'stats' | 'settings' | 'results' | 'winners' | 'closures' | 'settlement' | 'userSettings' | 'archive';
+export type Page = 'sales' | 'history' | 'stats' | 'settings' | 'results' | 'winners' | 'closures' | 'settlement' | 'userSettings';
 
 interface AppState {
   draws: Draw[];
@@ -190,7 +190,6 @@ interface AppState {
   removeResults: (drawId: string) => Promise<void>;
   recalculatePrizes: (ticketIds?: string[]) => void;
   resetSalesData: () => Promise<void>;
-  archiveTickets: () => Promise<void>;
   getGlobalStats: () => { totalSales: number; totalCommission: number; totalPrizes: number; totalCapitalInjection: number; utility: number };
 }
 
@@ -693,54 +692,6 @@ export const useStore = create<AppState>()(
           });
         } catch (error) {
           console.error('Error resetting sales data:', error);
-          throw error;
-        }
-      },
-
-      archiveTickets: async () => {
-        if (!auth.currentUser) return;
-        
-        try {
-          const { tickets, users, currentUser } = get();
-
-          const businessDate = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/Panama',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-          }).format(new Date());
-
-          const totalSales = tickets.reduce((sum, t) => sum + (t.total || 0), 0);
-          const totalCommission = Number(
-            tickets.reduce((sum, t) => sum + (t.commission || 0), 0).toFixed(2)
-          );
-          const totalPrizes = tickets.reduce((sum, t) => sum + (t.totalPrize || 0), 0);
-          const totalCapitalInjection = users.reduce((sum, u) => sum + (u.capitalInjection || 0), 0);
-          const totalUtility = Number(
-            (totalSales - totalCommission - totalPrizes + totalCapitalInjection).toFixed(2)
-          );
-
-          const summaryDoc = {
-            businessDate,
-            timezone: 'America/Panama',
-            sourceVersion: 'manual-v2',
-            manualArchive: true,
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser?.id || auth.currentUser.uid,
-            totals: {
-              totalSales,
-              totalCommission,
-              totalPrizes,
-              totalUtility,
-              totalCapitalInjection,
-              totalTickets: tickets.length,
-            },
-          };
-
-          // Same-day archive is overwritten with the latest saved snapshot.
-          await setDoc(doc(db, 'archivesDaily', businessDate), summaryDoc, { merge: true });
-        } catch (error) {
-          console.error('Error archiving tickets:', error);
           throw error;
         }
       },

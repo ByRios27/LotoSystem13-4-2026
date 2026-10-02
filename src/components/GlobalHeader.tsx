@@ -12,7 +12,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
   const { totalSales, totalCommission, totalPrizes, utility } = getGlobalStats();
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0B1220] border-b border-white/5 h-[65px] flex items-center px-2 shadow-xl">
+    <header className="sticky top-0 z-50 bg-[#0B1220] border-b border-white/5 h-[50px] flex items-center px-2 shadow-xl">
       {/* Left: Menu Icon */}
       <button 
         onClick={onMenuClick}
@@ -22,11 +22,11 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
       </button>
 
       {/* Center: Metrics Blocks */}
-      <div className="flex-1 flex items-center justify-around px-1">
+      <div className="flex-1 flex items-center justify-between px-2">
         {/* Ventas */}
         <div className="flex flex-col items-center px-1">
           <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Ventas</span>
-          <p className="text-[13px] font-black text-white leading-none tracking-tight">
+          <p className="text-[14px] font-black text-white leading-none tracking-tight">
             ${formatCurrency(totalSales)}
           </p>
         </div>
@@ -37,7 +37,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
         {/* Comisión */}
         <div className="flex flex-col items-center px-1">
           <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Comisión</span>
-          <p className="text-[13px] font-black text-orange-400 leading-none tracking-tight">
+          <p className="text-[14px] font-black text-orange-400 leading-none tracking-tight">
             ${formatCurrency(totalCommission)}
           </p>
         </div>
@@ -48,7 +48,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
         {/* Premios */}
         <div className="flex flex-col items-center px-1">
           <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Premios</span>
-          <p className="text-[13px] font-black text-red-500 leading-none tracking-tight">
+          <p className="text-[14px] font-black text-red-500 leading-none tracking-tight">
             ${formatCurrency(totalPrizes)}
           </p>
         </div>
@@ -60,7 +60,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
         <div className="flex flex-col items-center px-1">
           <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Utilidad</span>
           <p className={cn(
-            "text-[13px] font-black leading-none tracking-tight",
+            "text-[14px] font-black leading-none tracking-tight",
             utility < 0 ? "text-red-500" : "text-[#22C55E]"
           )}>
             ${formatCurrency(utility)}
@@ -68,8 +68,6 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
         </div>
       </div>
       
-      {/* Right: Spacer for balance */}
-      <div className="w-10" />
     </header>
   );
 };

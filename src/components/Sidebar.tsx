@@ -5,7 +5,6 @@ import {
   Lock as LockIcon, 
   Wallet, 
   UserCog, 
-  Archive, 
   LogOut, 
   X,
   ChevronRight,
@@ -29,7 +28,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { id: 'closures', label: 'Cierres', icon: LockIcon },
     { id: 'settlement', label: 'Liquidación', icon: Wallet },
     { id: 'settings', label: 'Configuración', icon: UserCog },
-    { id: 'archive', label: 'Archivo', icon: Archive },
   ];
 
   const handleLogout = async () => {

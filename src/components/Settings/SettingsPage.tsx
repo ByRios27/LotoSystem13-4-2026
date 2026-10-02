@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { Clock, Users, Tag, Sparkles, Bluetooth, ShieldCheck, History, Zap, Lock as LockOut, ChevronRight } from 'lucide-react';
+import { Clock, Users, Tag, Sparkles, Bluetooth, ShieldCheck, Lock as LockOut, ChevronRight } from 'lucide-react';
 import { cn } from '../../utils/helpers';
 import { DrawsSettingsSection } from './DrawsSettingsSection';
 import { UsersSettingsSection } from './UsersSettingsSection';
 import { SpecialPlaysSettingsSection } from './SpecialPlaysSettingsSection';
 import { ChancePricesSettings } from './ChancePricesSettings';
-import { PinValidationModal } from '../PinValidationModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { PullToRefresh } from '../PullToRefresh';
 
@@ -14,49 +13,9 @@ type SettingsTab = 'draws' | 'users' | 'chances' | 'special' | 'devices' | 'prof
 
 export const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('draws');
-  const { currentUser, resetSalesData, archiveTickets, updateUser } = useStore();
-  const [isResetting, setIsResetting] = useState(false);
-  const [isArchiving, setIsArchiving] = useState(false);
+  const { currentUser, updateUser } = useStore();
   const [newPin, setNewPin] = useState('');
   const [showPinForm, setShowPinForm] = useState(false);
-  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [pinAction, setPinAction] = useState<'reset' | 'archive' | null>(null);
-
-  const handleReset = () => {
-    setPinAction('reset');
-    setIsPinModalOpen(true);
-  };
-
-  const handleConfirmReset = async () => {
-    setIsResetting(true);
-    try {
-      await resetSalesData();
-      alert('Todos los datos de ventas han sido eliminados con éxito.');
-    } catch (error) {
-      alert('Error al eliminar los datos de ventas. Por favor, inténtalo de nuevo.');
-    } finally {
-      setIsResetting(false);
-      setPinAction(null);
-    }
-  };
-
-  const handleArchiveClick = () => {
-    setPinAction('archive');
-    setIsPinModalOpen(true);
-  };
-
-  const handleConfirmArchive = async () => {
-    setIsArchiving(true);
-    try {
-      await archiveTickets();
-      alert('El cierre diario ha sido archivado correctamente.');
-    } catch (error) {
-      alert('Error al archivar el cierre. Por favor, inténtalo de nuevo.');
-    } finally {
-      setIsArchiving(false);
-      setPinAction(null);
-    }
-  };
 
   const handleUpdatePin = async () => {
     if (!newPin || newPin.length < 4) {
@@ -180,39 +139,6 @@ export const SettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {currentUser?.role === 'CEO' && (
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest px-2">Zona de Administrador</h4>
-                    
-                    <button 
-                      onClick={handleArchiveClick}
-                      disabled={isArchiving}
-                      className="w-full flex items-center gap-4 p-4 bg-orange-400/10 rounded-2xl border border-orange-400/20 text-orange-400 hover:bg-orange-400/20 transition-all disabled:opacity-50"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-orange-400/20 flex items-center justify-center">
-                        <History size={20} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-black">Archivar Cierre del Día</p>
-                        <p className="text-xs opacity-80 font-medium">Genera un registro histórico de las ventas del día.</p>
-                      </div>
-                    </button>
-
-                    <button 
-                      onClick={handleReset}
-                      disabled={isResetting}
-                      className="w-full flex items-center gap-4 p-4 bg-rose-400/10 rounded-2xl border border-rose-400/20 text-rose-400 hover:bg-rose-400/20 transition-all disabled:opacity-50"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-rose-400/20 flex items-center justify-center">
-                        <Zap size={20} />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-black">Reinicio de Ventas</p>
-                        <p className="text-xs opacity-80 font-medium">Elimina todos los tickets. Acción irreversible.</p>
-                      </div>
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </motion.div>
@@ -231,19 +157,6 @@ export const SettingsPage: React.FC = () => {
           </p>
         </div>
       </PullToRefresh>
-
-      <PinValidationModal 
-        isOpen={isPinModalOpen}
-        onClose={() => {
-          setIsPinModalOpen(false);
-          setPinAction(null);
-        }}
-        onSuccess={pinAction === 'reset' ? handleConfirmReset : handleConfirmArchive}
-        title={pinAction === 'reset' ? 'Confirmar Reinicio de Ventas' : 'Confirmar Cierre Diario'}
-        description={pinAction === 'reset' 
-          ? 'Esta acción eliminará permanentemente todos los datos de ventas. Ingresa tu PIN para proceder.' 
-          : 'Se generará un resumen histórico de las ventas del día. Ingresa tu PIN para confirmar.'}
-      />
     </div>
   );
 };

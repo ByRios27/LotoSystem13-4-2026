@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, getBusinessDate } from '../utils/helpers';
 import { Calendar, History } from 'lucide-react';
 
 interface ArchiveDayTotals {
@@ -16,19 +16,24 @@ interface ArchiveDayTotals {
 interface ArchiveDayEntry {
   id: string;
   businessDate: string;
+  year?: number;
+  month?: string;
   timezone?: string;
   sourceVersion?: string;
   totals: ArchiveDayTotals;
 }
 
-type ArchiveMode = 'single' | 'range';
-
-function toDateInputValue(date: Date): string {
-  const y = date.getFullYear();
-  const m = `${date.getMonth() + 1}`.padStart(2, '0');
-  const d = `${date.getDate()}`.padStart(2, '0');
-  return `${y}-${m}-${d}`;
+interface ArchiveDrawEntry {
+  id: string;
+  drawName: string;
+  totalSales: number;
+  totalCommission: number;
+  totalPrizes: number;
+  totalTickets: number;
+  results?: string[];
 }
+
+type ArchiveMode = 'single' | 'range';
 
 function safeNumber(value: unknown): number {
   const num = Number(value);
@@ -37,21 +42,24 @@ function safeNumber(value: unknown): number {
 
 function formatDateLabel(dateString: string): string {
   if (!dateString) return '--';
-  const parsed = new Date(`${dateString}T00:00:00`);
+  const parsed = new Date(`${dateString}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return dateString;
   return parsed.toLocaleDateString('es-ES', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
 export const ArchivePage: React.FC = () => {
   const [archives, setArchives] = useState<ArchiveDayEntry[]>([]);
+  const [drawArchives, setDrawArchives] = useState<ArchiveDrawEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [drawsLoading, setDrawsLoading] = useState(false);
   const [mode, setMode] = useState<ArchiveMode>('single');
 
-  const today = toDateInputValue(new Date());
+  const today = getBusinessDate();
   const [singleDate, setSingleDate] = useState(today);
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
@@ -89,6 +97,35 @@ export const ArchivePage: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'single') {
+      setDrawArchives([]);
+      setDrawsLoading(false);
+      return;
+    }
+
+    setDrawsLoading(true);
+    return onSnapshot(collection(db, 'archivesDaily', singleDate, 'draws'), (snapshot) => {
+      const data = snapshot.docs.map((drawDoc) => {
+        const raw = drawDoc.data();
+        return {
+          id: drawDoc.id,
+          drawName: String(raw.drawName || raw.name || drawDoc.id),
+          totalSales: safeNumber(raw.totalSales),
+          totalCommission: safeNumber(raw.totalCommission),
+          totalPrizes: safeNumber(raw.totalPrizes),
+          totalTickets: safeNumber(raw.totalTickets),
+          results: Array.isArray(raw.results) ? raw.results : [],
+        } as ArchiveDrawEntry;
+      }).sort((a, b) => a.drawName.localeCompare(b.drawName));
+      setDrawArchives(data);
+      setDrawsLoading(false);
+    }, (error) => {
+      console.error('Draw archive subscription error:', error);
+      setDrawsLoading(false);
+    });
+  }, [mode, singleDate]);
 
   const selectedEntries = useMemo(() => {
     if (mode === 'single') {
@@ -196,6 +233,33 @@ export const ArchivePage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {mode === 'single' && (
+          <div className="bg-[#121A2B] rounded-xl p-3 border border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Detalle por sorteo</p>
+              <span className="text-[9px] font-bold text-slate-500">{formatDateLabel(singleDate)}</span>
+            </div>
+            {drawsLoading ? (
+              <div className="py-4 text-center text-[10px] font-bold text-slate-500">Cargando sorteos...</div>
+            ) : drawArchives.length === 0 ? (
+              <div className="py-4 text-center text-[10px] font-bold text-slate-500">Sin detalle por sorteo para esta fecha</div>
+            ) : drawArchives.map((draw) => (
+              <div key={draw.id} className="border-t border-white/5 pt-2 first:border-0 first:pt-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-black uppercase text-slate-200">{draw.drawName}</p>
+                  <p className="text-[9px] font-bold text-slate-500">{draw.totalTickets} tickets</p>
+                </div>
+                <p className="text-[9px] text-slate-400">
+                  Ventas ${formatCurrency(draw.totalSales)} | Comisión ${formatCurrency(draw.totalCommission)} | Premios ${formatCurrency(draw.totalPrizes)}
+                </p>
+                {draw.results && draw.results.length > 0 && (
+                  <p className="text-[9px] font-bold text-emerald-400">Resultados: {draw.results.join(' · ')}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-20">

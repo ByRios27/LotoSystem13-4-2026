@@ -6,7 +6,6 @@ import { HistoryPage } from './components/History/HistoryPage';
 import { ResultsPage } from './components/ResultsPage';
 import { WinnersPage } from './components/Winners/WinnersPage';
 import { ClosuresPage } from './components/ClosuresPage';
-import { ArchivePage } from './components/ArchivePage';
 import { SettlementPage } from './components/SettlementPage';
 import { Sidebar } from './components/Sidebar';
 import { GlobalHeader } from './components/GlobalHeader';
@@ -52,11 +51,10 @@ export default function App() {
           {currentPage === 'winners' && <WinnersPage />}
           {currentPage === 'closures' && <ClosuresPage />}
           {currentPage === 'settlement' && <SettlementPage />}
-          {currentPage === 'archive' && <ArchivePage />}
         </main>
         
         {/* Bottom Navigation */}
-        <nav className="bg-[#0B1220] border-t border-white/5 flex justify-around items-center py-2 h-[60px] safe-area-bottom z-50">
+        <nav className="bg-[#0B1220] border-t border-white/5 flex-none flex justify-around items-center py-1 h-[52px] safe-area-bottom z-50">
           <button
             onClick={() => setCurrentPage('sales')}
             className={cn(

@@ -243,6 +243,12 @@ export const SalesPanel: React.FC = () => {
 
   const handleKeypadPress = (val: string) => {
     if (!mainDraw) return;
+    if (val === '.') {
+      if (gameMode !== 'PALÉ' || activeInput !== 'amount') return;
+      setAmountInput((prev) => (prev.includes('.') ? prev : `${prev || '0'}.`));
+      return;
+    }
+
     const maxDigits = gameMode === 'CHANCE' ? 2 : (gameMode === 'PALÉ' ? 4 : mainDraw.digitsMode);
 
     if (activeInput === 'number') {
@@ -257,7 +263,10 @@ export const SalesPanel: React.FC = () => {
         }
       }
     } else {
-      setAmountInput(prev => (prev === '0' || prev === '' ? val : prev + val));
+      setAmountInput((prev) => {
+        if (gameMode === 'PALÉ' && prev.includes('.') && prev.split('.')[1].length >= 2) return prev;
+        return prev === '0' || prev === '' ? val : prev + val;
+      });
     }
   };
 
@@ -573,12 +582,12 @@ export const SalesPanel: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-dark-bg text-white select-none">
-      <PullToRefresh onRefresh={async () => window.location.reload()} className="flex-1 px-3 py-3.5 pb-4 space-y-3.5">
+      <PullToRefresh onRefresh={async () => window.location.reload()} className="flex-1 px-3 pt-2 pb-4 space-y-2">
         {/* Draw Selector */}
-        <div className="relative z-50">
-          <div className={cn("bg-card-bg rounded-xl p-3 flex items-center justify-between border border-white/5 shadow-lg transition-all active:scale-[0.99]", isDrawListOpen && "rounded-b-none border-b-transparent")} onClick={() => setIsDrawListOpen(!isDrawListOpen)}>
+        <div className="relative z-50 mb-2">
+          <div className={cn("bg-card-bg rounded-xl px-3 h-10 flex items-center justify-between border border-white/5 shadow-lg transition-all active:scale-[0.99]", isDrawListOpen && "rounded-b-none border-b-transparent")} onClick={() => setIsDrawListOpen(!isDrawListOpen)}>
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-brand-primary/20 text-brand-strong rounded-lg flex items-center justify-center"><Calendar size={16} /></div>
+              <div className="w-7 h-7 bg-brand-primary/20 text-brand-strong rounded-lg flex items-center justify-center"><Calendar size={16} /></div>
               <div>
                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Sorteo Activo</p>
                 <div className="flex items-center gap-1.5">
@@ -593,6 +602,13 @@ export const SalesPanel: React.FC = () => {
             {isDrawListOpen && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute top-full left-0 right-0 bg-card-bg border-x border-b border-white/5 rounded-b-xl shadow-2xl overflow-hidden">
                 <div className="max-h-[200px] overflow-y-auto divide-y divide-white/5">
+                  {isMultiMode && (
+                    <div className="flex justify-end gap-3 px-3 py-1">
+                      <button onClick={() => setSelectedDrawIds(sortDrawsByTime(activeDraws).map(d => d.id))} className="text-[9px] font-bold uppercase tracking-widest text-slate-500 active:text-white">Todos</button>
+                      {/* Siempre queda un sorteo seleccionado */}
+                      <button onClick={() => setSelectedDrawIds(prev => prev.slice(0, 1))} className="text-[9px] font-bold uppercase tracking-widest text-slate-500 active:text-white">Ninguno</button>
+                    </div>
+                  )}
                   {activeDraws.map((draw) => (
                     <div key={draw.id} onClick={() => toggleDrawSelection(draw.id)} className={cn("p-3 flex items-center justify-between active:bg-white/5 transition-colors cursor-pointer", selectedDrawIds.includes(draw.id) && "bg-brand-primary/10")}>
                       <div className="flex flex-col"><span className="text-sm font-bold text-white">{draw.name}</span><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{formatAMPM(draw.drawTime)}</span></div>
@@ -606,7 +622,7 @@ export const SalesPanel: React.FC = () => {
         </div>
 
         {/* Game Mode Tabs */}
-        <div className="flex gap-1.5 bg-card-bg p-1 rounded-xl border border-white/5 h-12">
+        <div className="flex gap-1.5 bg-card-bg p-1 rounded-xl border border-white/5 h-10 mb-2">
           <button onClick={() => handleSetGameMode('CHANCE')} className={cn("flex-1 rounded-lg font-bold text-xs uppercase tracking-wider transition-all", gameMode === 'CHANCE' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Chance</button>
           <div className="flex-1 flex gap-1 bg-white/5 p-0.5 rounded-lg">
             {mainDraw?.allowedSpecialBets.pale && <button onClick={() => handleSetGameMode('PALÉ')} className={cn("flex-1 rounded-md font-bold text-[10px] uppercase tracking-wider transition-all", gameMode === 'PALÉ' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Palé</button>}
@@ -615,7 +631,7 @@ export const SalesPanel: React.FC = () => {
         </div>
 
         {/* Inputs */}
-        <div className="grid grid-cols-2 gap-3 my-1">
+        <div className="grid grid-cols-2 gap-3">
           <button onClick={() => setActiveInput('number')} className={cn("bg-card-bg rounded-2xl h-20 flex flex-col items-center justify-center border-2 transition-all relative overflow-hidden", activeInput === 'number' ? "border-brand-primary bg-brand-primary/10" : "border-transparent")}>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Número</p>
             <p className="text-3xl font-black tracking-widest leading-none">{gameMode === 'PALÉ' ? (numberInput ? <>{numberInput.substring(0, 2)}{numberInput.length > 2 && <span className="text-brand-primary mx-1">-</span>}{numberInput.substring(2)}</> : '-- --') : (numberInput || (mainDraw?.digitsMode === 4 ? '----' : '--'))}</p>
@@ -650,7 +666,7 @@ export const SalesPanel: React.FC = () => {
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
             <button key={n} onClick={() => handleKeypadPress(n.toString())} className="keypad-button">{n}</button>
           ))}
-          <button onClick={() => handleKeypadPress('.')} className={cn("keypad-button text-xl", gameMode !== 'PALÉ' && "opacity-20 pointer-events-none")}>.</button>
+          <button onClick={() => handleKeypadPress('.')} className="keypad-button">.</button>
           <button onClick={() => handleKeypadPress('0')} className="keypad-button">0</button>
           <button onClick={handleBackspace} className="keypad-button text-brand-primary"><Delete size={24} /></button>
         </div>

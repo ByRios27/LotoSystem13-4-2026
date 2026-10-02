@@ -75,3 +75,4 @@ exports.resetUserPassword = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("internal", "Error resetting password.", error.message);
   }
 });
+

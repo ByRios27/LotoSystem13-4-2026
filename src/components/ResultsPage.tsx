@@ -278,76 +278,86 @@ export const ResultsPage: React.FC = () => {
               {filteredDraws.map((draw) => {
                 const financials = drawFinancials.get(draw.id);
                 const prizesExceedSales = !!financials && financials.totalPrizes > financials.totalSales;
+                const hasResults = !!draw.results?.length;
+                const canEnterResults = isCEO && !hasResults;
+                const openResultEditor = () => {
+                  setSelectedDrawId(draw.id);
+                  setIsResultEditorOpen(true);
+                };
 
                 return <div 
                   key={draw.id} 
+                  role={canEnterResults ? 'button' : undefined}
+                  tabIndex={canEnterResults ? 0 : undefined}
+                  aria-label={canEnterResults ? `Ingresar resultados de ${draw.name}` : undefined}
+                  onClick={canEnterResults ? openResultEditor : undefined}
+                  onKeyDown={canEnterResults ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openResultEditor();
+                    }
+                  } : undefined}
                   className={cn(
-                    "p-3 rounded-xl border transition-all flex items-center justify-between gap-2 shadow-md group relative",
+                    "p-3 rounded-xl border transition-all flex flex-col gap-2 shadow-md group relative",
                     prizesExceedSales
                       ? "bg-red-700 border-red-400 shadow-red-950/40"
-                      : selectedDrawId === draw.id ? "bg-[#121A2B] border-brand-primary/40 ring-1 ring-brand-primary/20" : "bg-[#121A2B] border-white/5"
+                      : selectedDrawId === draw.id ? "bg-[#121A2B] border-brand-primary/40 ring-1 ring-brand-primary/20" : "bg-[#121A2B] border-white/5",
+                    canEnterResults && "cursor-pointer hover:border-brand-primary/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-primary/40"
                   )}
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <div className={cn(
-                      "w-8 h-8 shrink-0 rounded-lg flex items-center justify-center",
-                      prizesExceedSales ? "bg-red-900 text-white" : draw.results?.length ? "bg-brand-primary/20 text-brand-primary" : "bg-white/10 text-slate-500"
-                    )}>
-                      <Clock size={16} />
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <p className="min-w-0 truncate whitespace-nowrap text-xs font-black text-white leading-tight" title={draw.name}>{draw.name}</p>
+                      <span className={cn("shrink-0 text-[9px] font-bold uppercase tracking-wide", prizesExceedSales ? "text-white" : "text-slate-400")}>{formatAMPM(draw.drawTime)}</span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate whitespace-nowrap text-xs font-black text-white leading-tight" title={draw.name}>{draw.name}</p>
-                      <p className={cn("text-[9px] font-bold uppercase tracking-wide mt-0.5", prizesExceedSales ? "text-white" : "text-slate-400")}>{formatAMPM(draw.drawTime)}</p>
-                      {draw.results?.length === 3 && (financials?.totalPrizes || 0) > 0 && (
-                        <p className="mt-0.5 text-[9px] font-black text-yellow-200">
-                          Premios ${formatCurrency(financials?.totalPrizes || 0)}
-                        </p>
-                      )}
-                    </div>
+                    {hasResults && (financials?.totalPrizes || 0) > 0 && (
+                      <p className="shrink-0 text-[9px] font-black text-yellow-200">
+                        Premios ${formatCurrency(financials?.totalPrizes || 0)}
+                      </p>
+                    )}
                   </div>
-                  
-                  {draw.results && draw.results.length > 0 ? (
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <div className="grid grid-cols-3 gap-1.5">
-                      {draw.results.map((r, i) => (
-                        <div key={i} className={cn(
-                          "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border",
-                          "bg-white text-slate-900 border-white"
-                        )}>
-                          {r}
+
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    {hasResults ? (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {draw.results.map((r, i) => (
+                            <div key={i} className={cn(
+                              "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border",
+                              "bg-white text-slate-900 border-white"
+                            )}>
+                              {r}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                        {isCEO && (
+                          <div className="flex shrink-0 gap-1.5">
+                            <button
+                              aria-label={`Editar resultados de ${draw.name}`}
+                              title="Editar resultados"
+                              onClick={openResultEditor}
+                              className={cn("w-8 h-8 rounded-lg flex items-center justify-center", prizesExceedSales ? "bg-white text-slate-900 hover:bg-slate-100" : "bg-white/5 text-slate-300 hover:text-white")}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              aria-label={`Eliminar resultados de ${draw.name}`}
+                              title="Eliminar resultados"
+                              onClick={() => {
+                                setSelectedDrawId(draw.id);
+                                setIsPinModalOpen(true);
+                              }}
+                              className={cn("w-8 h-8 rounded-lg flex items-center justify-center", prizesExceedSales ? "bg-red-950 text-white hover:bg-red-900" : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20")}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {isCEO && (
-                        <div className="flex shrink-0 gap-1.5">
-                          <button
-                            aria-label={`Editar resultados de ${draw.name}`}
-                            title="Editar resultados"
-                            onClick={() => {
-                              setSelectedDrawId(draw.id);
-                              setIsResultEditorOpen(true);
-                            }}
-                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center", prizesExceedSales ? "bg-white text-slate-900 hover:bg-slate-100" : "bg-white/5 text-slate-300 hover:text-white")}
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            aria-label={`Eliminar resultados de ${draw.name}`}
-                            title="Eliminar resultados"
-                            onClick={() => {
-                              setSelectedDrawId(draw.id);
-                              setIsPinModalOpen(true);
-                            }}
-                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center", prizesExceedSales ? "bg-red-950 text-white hover:bg-red-900" : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20")}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
                   ) : (
-                    <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Pendiente</span>
+                    <span className="ml-auto text-[8px] font-black text-slate-400 uppercase tracking-widest">Pendiente</span>
                   )}
+                  </div>
                 </div>
               })}
             </div>

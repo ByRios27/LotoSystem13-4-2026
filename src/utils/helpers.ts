@@ -89,6 +89,18 @@ export function getCurrentTimeMinutes(): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
+export function getBusinessDate(timestamp = Date.now()): string {
+  const shiftedDate = new Date(timestamp - 2 * 60 * 60 * 1000);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Panama',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(shiftedDate);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export function sortDrawsByTime<T extends { drawTimeSort?: number; drawTime?: string }>(draws: T[]): T[] {
   const now = getCurrentTimeMinutes();
 

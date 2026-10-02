@@ -13,21 +13,25 @@ import { PullToRefresh } from '../PullToRefresh';
 type SettingsTab = 'draws' | 'users' | 'chances' | 'special' | 'devices' | 'profile';
 
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('draws');
+  const [selectedTab, setActiveTab] = useState<SettingsTab>('draws');
   const currentUser = useStore((state) => state.currentUser);
+  const isCEO = currentUser?.role === 'CEO';
+
+  const tabs = [
+    { id: 'draws', label: 'Sorteos', icon: Clock, ceoOnly: true },
+    { id: 'users', label: 'Usuarios', icon: Users, ceoOnly: true },
+    { id: 'chances', label: 'Chances', icon: Tag, ceoOnly: true },
+    { id: 'special', label: 'Especiales', icon: Sparkles, ceoOnly: true },
+    { id: 'devices', label: 'Dispositivos', icon: Bluetooth, ceoOnly: false },
+    { id: 'profile', label: 'Mi Perfil', icon: ShieldCheck, ceoOnly: false },
+  ].filter(tab => isCEO || !tab.ceoOnly);
+  const activeTab: SettingsTab = tabs.some(tab => tab.id === selectedTab) ? selectedTab : (tabs[0].id as SettingsTab);
 
   return (
     <div className="flex flex-col h-full bg-[#0B1220] text-white overflow-hidden">
       <div className="px-4 py-3 bg-[#0B1220] border-b border-white/5">
         <div className="flex gap-1 p-1 bg-white/5 rounded-2xl border border-white/5 overflow-x-auto no-scrollbar">
-          {[
-            { id: 'draws', label: 'Sorteos', icon: Clock },
-            { id: 'users', label: 'Usuarios', icon: Users },
-            { id: 'chances', label: 'Chances', icon: Tag },
-            { id: 'special', label: 'Especiales', icon: Sparkles },
-            { id: 'devices', label: 'Dispositivos', icon: Bluetooth },
-            { id: 'profile', label: 'Mi Perfil', icon: ShieldCheck },
-          ].map(tab => (
+          {tabs.map(tab => (
             <button 
               key={tab.id}
               onClick={() => setActiveTab(tab.id as SettingsTab)}

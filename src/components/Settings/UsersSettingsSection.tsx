@@ -5,12 +5,34 @@ import { db, auth, firebaseConfig } from '../../firebase';
 import { createUserWithEmailAndPassword, signOut, initializeAuth, inMemoryPersistence } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Trash2, Edit, AlertTriangle, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import { UserPlus, Trash2, Edit, AlertTriangle, X, ToggleLeft, ToggleRight, Share2 } from 'lucide-react';
 import { generateSellerId, cn } from '../../utils/helpers';
 import { PinValidationModal } from '../PinValidationModal';
 
 
 const ROLES: User['role'][] = ['seller', 'leader'];
+
+const EMAIL_DOMAIN = '@lottopro.system';
+
+async function shareCredentials(email: string, password?: string): Promise<'shared' | 'copied' | 'failed'> {
+  const text = `usuario: ${email}${password ? `\ncontraseña: ${password}` : ''}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Credenciales LottoPro', text });
+      return 'shared';
+    }
+    await navigator.clipboard.writeText(text);
+    return 'copied';
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return 'shared';
+    try {
+      await navigator.clipboard.writeText(text);
+      return 'copied';
+    } catch {
+      return 'failed';
+    }
+  }
+}
 
 async function createLoginAccount(username: string, password: string): Promise<string> {
   const email = `${username.toLowerCase().trim()}@lottopro.system`;
@@ -38,6 +60,8 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState('123456');
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
 
   const users = useStore((state) => state.users);
 
@@ -80,7 +104,7 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
       };
 
       await setDoc(doc(db, 'users', newUserId), newUser);
-      onUserAdded();
+      setCreated({ email: newUser.email!, password });
     } catch (err: any) {
       console.error('Error creating user:', err);
       if (err.code === 'auth/email-already-in-use') {
@@ -113,13 +137,38 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
         <div className="px-4 py-3 flex items-center justify-between bg-white/5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <UserPlus size={16} className="text-brand-primary" />
-            <h3 className="font-black text-white text-sm uppercase tracking-wider">Nuevo Usuario</h3>
+            <h3 className="font-black text-white text-sm uppercase tracking-wider">{created ? 'Usuario Creado' : 'Nuevo Usuario'}</h3>
           </div>
           <button type="button" onClick={onUserAdded} className="p-1.5 bg-white/10 rounded-full active:scale-95 transition-all text-slate-300">
             <X size={16} />
           </button>
         </div>
 
+        {created ? (
+          <div className="form-compact p-4 space-y-3">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1.5">
+              <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Usuario</p>
+              <p className="text-sm font-bold text-white break-all">{created.email}</p>
+              <p className="text-[10px] font-black text-slate-200 uppercase tracking-widest pt-1">Contraseña</p>
+              <p className="text-sm font-bold text-white break-all">{created.password}</p>
+            </div>
+            {shareStatus && <p className="text-xs font-bold text-lime-400">{shareStatus}</p>}
+            <div className="flex gap-3">
+              <button type="button" onClick={onUserAdded} className="w-full bg-white/10 text-white/80 h-10 rounded-2xl font-black uppercase text-sm tracking-widest active:scale-95 transition-all">Cerrar</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const result = await shareCredentials(created.email, created.password);
+                  setShareStatus(result === 'copied' ? 'Credenciales copiadas.' : result === 'failed' ? 'No se pudo compartir.' : null);
+                }}
+                className="w-full bg-brand-primary text-black h-10 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all"
+              >
+                <Share2 size={16} />
+                Compartir
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleCreateUser} className="form-compact p-4 space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar">
           <div className="form-group">
             <label>Nombre Completo</label>
@@ -127,7 +176,8 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
           </div>
           <div className="form-group">
             <label>Nombre de Usuario</label>
-            <input type="text" placeholder="Ej. juanp" value={username} onChange={e => setUsername(e.target.value)} required />
+            <input type="text" placeholder="Ej. juanp" value={username} onChange={e => setUsername(e.target.value.replace(/\s/g, ''))} required className="pr-36" />
+            <span className="pointer-events-none absolute right-2.5 bottom-[7px] text-xs font-bold text-slate-400">{EMAIL_DOMAIN}</span>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div className="form-group">
@@ -168,6 +218,7 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
             </button>
           </div>
         </form>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -275,6 +326,7 @@ export const UsersSettingsSection = () => {
                             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5 truncate">@{user.username} · {user.role} · {Math.round(user.commission * 100)}%</p>
                         </div>
                         <div className="flex items-center shrink-0">
+                            <button onClick={() => shareCredentials(user.email || `${user.username}${EMAIL_DOMAIN}`)} title="Compartir usuario" className="p-2 rounded-lg text-slate-500 hover:text-white transition-colors"><Share2 size={16}/></button>
                             <button onClick={() => toggleUserStatus(user)} className={cn("p-2 rounded-lg transition-all active:scale-90", user.status === 'active' ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-400")}>
                                 {user.status === 'active' ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
                             </button>

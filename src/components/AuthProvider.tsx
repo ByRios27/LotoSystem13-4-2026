@@ -130,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         return { draws: Array.from(mergedDraws.values()) };
       });
+      useStore.getState().recalculatePrizes();
     }, (err) => console.error('Draws subscription error:', err));
 
     const ticketsQuery = currentStoreUser.role === 'CEO'
@@ -146,6 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastTicketsSyncAt: Date.now(),
         isTicketsRefreshing: false,
       });
+      // Los premios no se guardan en Firestore; se recalculan con los resultados vigentes.
+      useStore.getState().recalculatePrizes();
     }, (err) => {
       useStore.setState({ isTicketsRefreshing: false });
       console.error('Tickets subscription error:', err);

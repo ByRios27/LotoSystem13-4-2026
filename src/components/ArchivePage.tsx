@@ -9,7 +9,6 @@ interface ArchiveDayTotals {
   totalCommission: number;
   totalPrizes: number;
   totalUtility: number;
-  totalCapitalInjection?: number;
   totalTickets?: number;
 }
 
@@ -73,7 +72,7 @@ export const ArchivePage: React.FC = () => {
         const totalSales = safeNumber(totalsRaw.totalSales);
         const totalCommission = safeNumber(totalsRaw.totalCommission);
         const totalPrizes = safeNumber(totalsRaw.totalPrizes);
-        const fallbackUtility = totalSales - totalCommission - totalPrizes + safeNumber(totalsRaw.totalCapitalInjection);
+        const fallbackUtility = totalSales - totalCommission - totalPrizes;
 
         return {
           id: docSnap.id,
@@ -85,7 +84,6 @@ export const ArchivePage: React.FC = () => {
             totalCommission,
             totalPrizes,
             totalUtility: Number(safeNumber(totalsRaw.totalUtility || fallbackUtility).toFixed(2)),
-            totalCapitalInjection: safeNumber(totalsRaw.totalCapitalInjection),
             totalTickets: safeNumber(totalsRaw.totalTickets),
           },
         } as ArchiveDayEntry;

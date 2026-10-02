@@ -31,8 +31,7 @@ service cloud.firestore {
              isValidString(data.username, 1, 50) &&
              data.role in ['CEO', 'VENDEDOR', 'USUARIO'] &&
              data.status in ['active', 'inactive'] &&
-             data.commission is number && data.commission >= 0 && data.commission <= 1 &&
-             (!('capitalInjection' in data) || data.capitalInjection is number);
+             data.commission is number && data.commission >= 0 && data.commission <= 1;
     }
 
     match /users/{userId} {

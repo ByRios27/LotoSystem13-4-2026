@@ -133,7 +133,6 @@ export interface User {
   commission: number;
   sellerId?: string;
   pin?: string;
-  capitalInjection?: number;
 }
 
 export interface SpecialPlay {
@@ -190,7 +189,7 @@ interface AppState {
   removeResults: (drawId: string) => Promise<void>;
   recalculatePrizes: (ticketIds?: string[]) => void;
   resetSalesData: () => Promise<void>;
-  getGlobalStats: () => { totalSales: number; totalCommission: number; totalPrizes: number; totalCapitalInjection: number; utility: number };
+  getGlobalStats: () => { totalSales: number; totalCommission: number; totalPrizes: number; utility: number };
 }
 
 const defaultPayouts = { first: 60, second: 8, third: 4 };
@@ -595,7 +594,7 @@ export const useStore = create<AppState>()(
         if (!auth.currentUser) return;
         
         try {
-          const { tickets, draws, users, currentUser } = get();
+          const { tickets, draws } = get();
           
           // 1. Delete all tickets from Firestore
           const ticketPromises = tickets.map(t => deleteDoc(doc(db, 'tickets', t.id)));
@@ -603,17 +602,7 @@ export const useStore = create<AppState>()(
           // 2. Clear results from all draws in Firestore
           const drawPromises = draws.map(d => updateDoc(doc(db, 'draws', d.id), { results: deleteField() }));
 
-          // 3. Reset capital injections for all known users
-          const userIds = new Set<string>(users.map((u) => u.id).filter(Boolean));
-          if (currentUser?.id) userIds.add(currentUser.id);
-          const resetInjectionPromises = Array.from(userIds).map((userId: string) =>
-            updateDoc(doc(db, 'users', userId), { capitalInjection: 0 }).catch(async () => {
-              // If document doesn't exist for any reason, create/merge the field.
-              await setDoc(doc(db, 'users', userId), { capitalInjection: 0 }, { merge: true });
-            })
-          );
-
-          // 4. Clear any historical control docs (limits removed, but collection may still have legacy entries)
+          // 3. Clear any historical control docs (limits removed, but collection may still have legacy entries)
           const betsControlSnapshot = await getDocs(collection(db, 'betsControl'));
           const batchSize = 450;
           const betControlDocs = betsControlSnapshot.docs;
@@ -629,19 +618,16 @@ export const useStore = create<AppState>()(
           await Promise.all([
             ...ticketPromises,
             ...drawPromises,
-            ...resetInjectionPromises,
             ...deleteBetControlPromises,
           ]);
           
-          // 5. Update local state
+          // 4. Update local state
           set({
             tickets: [],
             draws: draws.map(d => {
               const { results, ...rest } = d;
               return rest;
             }),
-            users: users.map((u) => ({ ...u, capitalInjection: 0 })),
-            currentUser: currentUser ? { ...currentUser, capitalInjection: 0 } : null,
           });
         } catch (error) {
           console.error('Error resetting sales data:', error);
@@ -650,7 +636,7 @@ export const useStore = create<AppState>()(
       },
 
       getGlobalStats: () => {
-        const { tickets, users } = get();
+        const { tickets } = get();
         const totalSales = tickets.reduce((sum, t) => sum + t.total, 0);
         
         const totalCommission = Number(tickets.reduce((sum, t) => {
@@ -659,16 +645,13 @@ export const useStore = create<AppState>()(
         }, 0).toFixed(2));
 
         const totalPrizes = tickets.reduce((sum, t) => sum + (t.totalPrize || 0), 0);
-        
-        const totalCapitalInjection = users.reduce((sum, u) => sum + (u.capitalInjection || 0), 0);
 
-        const utility = Number(((totalSales - totalCommission) - totalPrizes + totalCapitalInjection).toFixed(2));
+        const utility = Number(((totalSales - totalCommission) - totalPrizes).toFixed(2));
 
         return {
           totalSales,
           totalCommission,
           totalPrizes,
-          totalCapitalInjection,
           utility
         };
       },

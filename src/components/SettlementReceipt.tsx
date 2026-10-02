@@ -9,7 +9,6 @@ interface SettlementReceiptProps {
   stats: {
     initialFund: number;
     grossSales: number;
-    injections: number;
     prizes: number;
     expenses: number;
     commission: number;
@@ -56,7 +55,6 @@ export const SettlementReceipt: React.FC<SettlementReceiptProps> = ({
           <tbody className="divide-y divide-slate-100">
             <Row label="Fondo Inicial" value={stats.initialFund} />
             <Row label="Ventas Totales Brutas" value={stats.grossSales} />
-            <Row label="Inyecciones de Casa Grande" value={stats.injections} />
             <Row label="Premios del Día (Automáticos)" value={stats.prizes} />
             <Row label="Otros Premios / Gastos (Manuales)" value={stats.expenses} isRaw />
             <tr className="bg-slate-50 font-black">

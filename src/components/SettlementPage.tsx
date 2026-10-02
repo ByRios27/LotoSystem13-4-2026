@@ -8,28 +8,44 @@ import { exportNodeAsPng } from '../utils/shareImage';
 import { shareGeneratedImage } from '../utils/shareGeneratedImage';
 
 export const SettlementPage: React.FC = () => {
-  const { tickets, draws, currentUser, getGlobalStats } = useStore();
+  const { tickets, users, currentUser } = useStore();
+  const isCEO = currentUser?.role === 'CEO';
+  const [scope, setScope] = useState<string>('local');
   const settlementRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
+  const otherUsers = useMemo(
+    () => users.filter(u => u.id !== currentUser?.id).sort((a, b) => a.name.localeCompare(b.name)),
+    [users, currentUser?.id]
+  );
+  const scopeUserId = scope === 'local' ? currentUser?.id : scope;
+  const scopeLabel = scope === 'global'
+    ? 'Global'
+    : scope === 'local'
+      ? (currentUser?.name || 'Administrador')
+      : (users.find(u => u.id === scope)?.name || 'Usuario');
+
   const stats = useMemo(() => {
-    const { totalSales, totalCommission, totalPrizes, totalCapitalInjection, utility } = getGlobalStats();
+    const scoped = scope === 'global' && isCEO ? tickets : tickets.filter(t => t.userId === scopeUserId);
+    const totalSales = scoped.reduce((sum, t) => sum + t.total, 0);
+    const totalCommission = Number(scoped.reduce((sum, t) => sum + (t.commission || 0), 0).toFixed(2));
+    const totalPrizes = scoped.reduce((sum, t) => sum + (t.totalPrize || 0), 0);
+    const utility = Number((totalSales - totalCommission - totalPrizes).toFixed(2));
     const fallbackRate = currentUser?.commission ?? useStore.getState().settings.commissionRate ?? 0.15;
     const effectiveRate = totalSales > 0 ? (totalCommission / totalSales) : fallbackRate;
-    const operatingUtility = Number((totalSales - totalCommission - totalPrizes).toFixed(2));
-    const liquidationBalance = Number((operatingUtility - totalCapitalInjection).toFixed(2));
+    const operatingUtility = utility;
+    const liquidationBalance = operatingUtility;
 
     return {
       sales: totalSales,
       prizes: totalPrizes,
       commission: totalCommission,
-      injections: totalCapitalInjection,
-      netProfit: utility, // utility is totalSales - totalCommission - totalPrizes + injections
+      netProfit: utility, // utility is totalSales - totalCommission - totalPrizes
       operatingUtility,
       liquidationBalance,
       commissionRate: Number((effectiveRate * 100).toFixed(2))
     };
-  }, [getGlobalStats, currentUser?.commission]);
+  }, [tickets, scope, scopeUserId, isCEO, currentUser?.commission]);
 
   const isLiquidationPositive = stats.liquidationBalance >= 0;
   const summaryCardClass = isLiquidationPositive
@@ -79,11 +95,10 @@ export const SettlementPage: React.FC = () => {
       <div className="fixed left-[-9999px] top-0">
         <div ref={settlementRef}>
           <SettlementReceipt 
-            operatorName={currentUser?.name || 'Administrador'}
+            operatorName={scopeLabel}
             stats={{
               initialFund: 0,
               grossSales: stats.sales,
-              injections: stats.injections,
               prizes: stats.prizes,
               expenses: 0,
               commission: stats.commission,
@@ -95,6 +110,19 @@ export const SettlementPage: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 pb-24">
+        {isCEO && (
+          <div className="flex justify-end">
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+              className="h-7 rounded-lg border border-white/20 bg-[#0B1220] px-2 text-[10px] font-black uppercase tracking-widest text-slate-200 outline-none focus:border-brand-primary/80"
+            >
+              <option value="local">Local</option>
+              {otherUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <option value="global">Global</option>
+            </select>
+          </div>
+        )}
         {/* Header Card */}
         <div className={summaryCardClass}>
           <div className="relative z-10">
@@ -166,10 +194,6 @@ export const SettlementPage: React.FC = () => {
               <span className="text-xs font-black text-rose-400">-${formatCurrency(stats.prizes)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-400">Inyección de Capital</span>
-              <span className="text-xs font-black text-emerald-400">+${formatCurrency(stats.injections)}</span>
-            </div>
-            <div className="flex justify-between items-center">
               <span className="text-xs font-bold text-slate-400">Comisión ({stats.commissionRate}%)</span>
               <span className="text-xs font-black text-blue-400">-${formatCurrency(stats.commission)}</span>
             </div>
@@ -180,7 +204,7 @@ export const SettlementPage: React.FC = () => {
               </div>
               <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-white/90">
                 {isLiquidationPositive
-                  ? `Saldo Casa Grande Positivo: la utilidad supera la inyección (+$${formatCurrency(stats.liquidationBalance)}).`
+                  ? `Saldo Casa Grande Positivo (+$${formatCurrency(stats.liquidationBalance)}).`
                   : `Saldo Casa Grande Negativo: pérdida de $${formatCurrency(Math.abs(stats.liquidationBalance))}.`}
               </p>
             </div>

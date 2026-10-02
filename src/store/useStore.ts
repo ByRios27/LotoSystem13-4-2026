@@ -195,54 +195,7 @@ interface AppState {
 
 const defaultPayouts = { first: 60, second: 8, third: 4 };
 
-const defaultDrawDefinitions: Array<{ id: string; name: string; drawTime: string; digitsMode?: 2 | 4 }> = [
-  { id: 'anguilla-0900', name: 'Anguilla 🇦🇮 9am', drawTime: '09:00' },
-  { id: 'anguilla-1000', name: 'Anguilla 🇦🇮 10am', drawTime: '10:00' },
-  { id: 'la-primera-1100', name: 'La Primera 🇩🇴 11am', drawTime: '11:00' },
-  { id: 'nica-1200', name: 'Nica 🇳🇮 12md', drawTime: '12:00' },
-  { id: 'honduras-1200', name: 'Honduras 🇭🇳 12md', drawTime: '12:00' },
-  { id: 'florida-1230', name: 'Florida 🦩 12:30pm', drawTime: '12:30' },
-  { id: 'anguilla-1300', name: 'Anguilla 🇦🇮 1pm', drawTime: '13:00' },
-  { id: 'new-york-1330', name: 'New York 🗽 1:30pm', drawTime: '13:30' },
-  { id: 'tica-monazos-1355', name: 'Tica(Monazos) 🇨🇷 1:55pm', drawTime: '13:55' },
-  { id: 'anguilla-1500', name: 'Anguilla 🇦🇮 3pm', drawTime: '15:00' },
-  { id: 'nacional-1500', name: 'Nacional 🇵🇦 3pm (4 cifras)', drawTime: '15:00', digitsMode: 4 },
-  { id: 'nica-1600', name: 'Nica 🇳🇮 4pm', drawTime: '16:00' },
-  { id: 'honduras-1600', name: 'Honduras 🇭🇳 4pm', drawTime: '16:00' },
-  { id: 'tica-monazos-1730', name: 'Tica(Monazos) 🇨🇷 5:30pm', drawTime: '17:30' },
-  { id: 'la-primera-1800', name: 'La Primera 🇩🇴 6pm', drawTime: '18:00' },
-  { id: 'anguilla-1900', name: 'Anguilla 🇦🇮 7pm', drawTime: '19:00' },
-  { id: 'tica-monazos-2030', name: 'Tica(Monazos) 🇨🇷 8:30pm', drawTime: '20:30' },
-  { id: 'tica-tradicional-2030', name: 'Tica Trad. 🇨🇷 8:30pm', drawTime: '20:30' },
-  { id: 'florida-2050', name: 'Florida 🦩 8:50pm', drawTime: '20:50' },
-  { id: 'new-york-2130', name: 'New York 🗽 9:30pm', drawTime: '21:30' },
-  { id: 'nica-2200', name: 'Nica 🇳🇮 10pm', drawTime: '22:00' },
-  { id: 'honduras-2200', name: 'Honduras 🇭🇳 10pm', drawTime: '22:00' },
-].map(({ id, name, drawTime, digitsMode = 2 }) => {
-  const [hours, minutes] = drawTime.split(':').map(Number);
-  const drawTimeSort = hours * 60 + minutes;
-  const closeTimeSort = drawTimeSort - 3;
-  const now = Date.now();
-
-  return {
-    id,
-    name,
-    drawTime,
-    drawTimeSort,
-    closeTime: `${Math.floor(closeTimeSort / 60).toString().padStart(2, '0')}:${(closeTimeSort % 60).toString().padStart(2, '0')}`,
-    closeTimeSort,
-    digitsMode,
-    allowedSpecialBets: { pale: true, billete: false },
-    isActive: true,
-    results: [],
-    createdAt: now,
-    updatedAt: now,
-    createdBy: 'system',
-    updatedBy: 'system',
-  };
-});
-
-const defaultDraws: Draw[] = defaultDrawDefinitions;
+const defaultDraws: Draw[] = [];
 
 if (typeof window !== 'undefined') {
   window.localStorage.removeItem('lottopro-storage');
@@ -754,11 +707,13 @@ export const useStore = create<AppState>()(
           const drawTimeSort = typeof draw.drawTimeSort === 'number'
             ? draw.drawTimeSort
             : draw.drawTime.split(':').map(Number).reduce((hours, value, index) => hours + value * (index === 0 ? 60 : 1), 0);
-          const closeTimeSort = (drawTimeSort - 3 + 1440) % 1440;
+          // Se conserva la hora de cierre existente; solo se completa si falta.
+          if (typeof draw.closeTimeSort === 'number' && draw.closeTime) return draw;
+          const closeTimeSort = draw.closeTime
+            ? draw.closeTime.split(':').map(Number).reduce((hours, value, index) => hours + value * (index === 0 ? 60 : 1), 0)
+            : (drawTimeSort - 3 + 1440) % 1440;
           const closeTime = `${Math.floor(closeTimeSort / 60).toString().padStart(2, '0')}:${(closeTimeSort % 60).toString().padStart(2, '0')}`;
-          return draw.closeTimeSort === closeTimeSort && draw.closeTime === closeTime
-            ? draw
-            : { ...draw, closeTime, closeTimeSort };
+          return { ...draw, closeTime, closeTimeSort };
         });
 
         // --- Start of migration logic ---

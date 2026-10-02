@@ -16,6 +16,9 @@ export const DrawFormModal: React.FC<ModalProps> = ({ draw, onClose }) => {
   const [digitsMode, setDigitsMode] = useState<2 | 4>(draw?.digitsMode || 2);
   const [paleEnabled, setPaleEnabled] = useState(draw?.allowedSpecialBets?.pale ?? true);
   const [billeteEnabled, setBilleteEnabled] = useState(draw?.allowedSpecialBets?.billete ?? false);
+  const [closeTime, setCloseTime] = useState(
+    draw?.closeTime || minutesToTime((timeToMinutes(draw?.drawTimeSort ? minutesToTime(draw.drawTimeSort) : '12:00') - 3 + 1440) % 1440)
+  );
   const [isActive, setIsActive] = useState(draw?.isActive ?? true);
   const [error, setError] = useState('');
 
@@ -27,8 +30,11 @@ export const DrawFormModal: React.FC<ModalProps> = ({ draw, onClose }) => {
     }
 
     const drawTimeSort = timeToMinutes(drawTime);
-    const closeTimeSort = (drawTimeSort - 3 + 1440) % 1440;
-    const closeTime = minutesToTime(closeTimeSort);
+    if (!closeTime) {
+      setError('La hora de cierre es obligatoria');
+      return;
+    }
+    const closeTimeSort = timeToMinutes(closeTime);
 
     const drawData = {
       name,
@@ -108,8 +114,8 @@ export const DrawFormModal: React.FC<ModalProps> = ({ draw, onClose }) => {
                 <label>Hora de Cierre</label>
                 <input 
                   type="time"
-                  value={minutesToTime((timeToMinutes(drawTime) - 3 + 1440) % 1440)}
-                  readOnly
+                  value={closeTime}
+                  onChange={(e) => setCloseTime(e.target.value)}
                 />
               </div>
             </div>

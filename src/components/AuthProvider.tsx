@@ -118,9 +118,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as Draw));
 
       useStore.setState((state) => {
-        const mergedDraws = new Map(state.draws.map((draw) => [draw.id, draw]));
+        const mergedDraws = new Map<string, Draw>();
         remoteDraws.forEach((draw) => {
-          const existingDraw = mergedDraws.get(draw.id);
+          const existingDraw = state.draws.find((d) => d.id === draw.id);
           const mergedDraw = { ...existingDraw, ...draw };
           if (!Object.prototype.hasOwnProperty.call(draw, 'results')) {
             delete mergedDraw.results;

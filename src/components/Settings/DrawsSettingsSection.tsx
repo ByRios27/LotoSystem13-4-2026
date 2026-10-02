@@ -24,7 +24,7 @@ export const DrawsSettingsSection: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between px-2">
         <div>
           <h2 className="text-sm font-black text-white uppercase tracking-widest">Administración de Sorteos</h2>
@@ -33,7 +33,7 @@ export const DrawsSettingsSection: React.FC = () => {
         <PermissionGuard allowedRoles={['CEO']}>
           <button 
             onClick={() => handleOpenModal()}
-            className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all"
+            className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all shrink-0 whitespace-nowrap"
           >
             <Plus size={16} />
             Añadir Sorteo
@@ -41,31 +41,31 @@ export const DrawsSettingsSection: React.FC = () => {
         </PermissionGuard>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {sortedDraws.length > 0 ? sortedDraws.map((draw) => (
           <motion.div 
             layout
             key={draw.id} 
             className={cn(
-              "bg-white/5 rounded-2xl border p-4 flex items-center justify-between transition-all",
+              "bg-white/5 rounded-2xl border p-3 flex items-center justify-between transition-all",
               draw.isActive ? "border-white/10" : "border-red-500/20 opacity-70"
             )}
           >
             <div className="flex min-w-0 items-center">
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="font-bold text-base text-white tracking-tight">{draw.name}</h4>
+                  <h4 className="font-bold text-sm text-white tracking-tight">{draw.name}</h4>
                   {!draw.isActive && (
                     <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-[8px] font-black uppercase tracking-widest rounded-md border border-red-500/30">
                       Inactivo
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap">
                     HORA: {formatAMPM(draw.drawTime)}
                   </p>
-                  <p className="text-xs text-rose-400 font-bold uppercase tracking-wider">
+                  <p className="text-[11px] text-rose-400 font-bold uppercase tracking-wider whitespace-nowrap">
                     CIERRE: {formatAMPM(draw.closeTime)}
                   </p>
                 </div>
@@ -79,13 +79,13 @@ export const DrawsSettingsSection: React.FC = () => {
               <div className="flex items-center gap-1">
                 <button 
                   onClick={() => updateDraw(draw.id, { isActive: !draw.isActive })}
-                  className={cn("p-2.5 rounded-lg transition-all active:scale-90", draw.isActive ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-400")}
+                  className={cn("p-2 rounded-lg transition-all active:scale-90", draw.isActive ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-400")}
                 >
                   {draw.isActive ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
                 </button>
                 <button 
                   onClick={() => handleOpenModal(draw)}
-                  className="p-2.5 rounded-lg text-slate-500 hover:text-white transition-colors"
+                  className="p-2 rounded-lg text-slate-500 hover:text-white transition-colors"
                 >
                   <Edit2 size={16} />
                 </button>
@@ -95,7 +95,7 @@ export const DrawsSettingsSection: React.FC = () => {
                       deleteDraw(draw.id);
                     }
                   }}
-                  className="p-2.5 rounded-lg text-slate-600 hover:text-red-500 transition-colors"
+                  className="p-2 rounded-lg text-slate-600 hover:text-red-500 transition-colors"
                 >
                   <Trash2 size={16} />
                 </button>

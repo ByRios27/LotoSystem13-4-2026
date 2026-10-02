@@ -47,15 +47,15 @@ export const BilleteSettingsSection: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-        <div className="flex items-center justify-between px-2">
+    <div className="form-compact space-y-3">
+        <div className="flex flex-col gap-2 px-2">
             <div>
                 <h2 className="text-sm font-black text-white uppercase tracking-widest">Ajustes de Billete</h2>
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Configura los límites, pagos y estado del billete.</p>
             </div>
              <PermissionGuard allowedRoles={['CEO']}>
                 <div className="flex items-center justify-between form-group-inline p-0 m-0 border-none bg-transparent">
-                    <label className='text-xs font-bold text-white'>Venta de Billetes</label>
+                    <label className='text-xs font-bold text-white whitespace-nowrap mr-2'>Venta de Billetes</label>
                     <button type="button" onClick={() => setBillete(prev => ({...prev, enabled: !prev.enabled}))} className={cn("transition-all active:scale-90", billete.enabled ? "text-brand-primary" : "text-slate-700")}>
                         {billete.enabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
                     </button>
@@ -63,25 +63,25 @@ export const BilleteSettingsSection: React.FC = () => {
           </PermissionGuard>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-             <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-1 mb-4">Límites y Precios</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+             <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-1 mb-2">Límites y Precios</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className='form-group'>
                   <label>Precio Fijo por Billete</label>
                   <input type="number" value={billete.unitPrice} readOnly disabled />
-                  <p className="text-xs text-slate-500 mt-2 px-1">El precio es fijo por unidad y no se puede modificar.</p>
+                  <p className="text-xs text-slate-500 mt-1 px-1">El precio es fijo por unidad y no se puede modificar.</p>
               </div>
               <div className='form-group'>
                   <label>Límite Global por Número</label>
                   <input type="number" value={billete.globalLimitPerNumber} onChange={(e) => setBillete(prev => ({ ...prev, globalLimitPerNumber: parseInt(e.target.value, 10) || 0 }))} />
-                   <p className="text-xs text-slate-500 mt-2 px-1">Cantidad máxima de billetes de un mismo número.</p>
+                   <p className="text-xs text-slate-500 mt-1 px-1">Cantidad máxima de billetes de un mismo número.</p>
               </div>
             </div>
         </div>
 
         <div>
-          <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-3 mb-3">Tabla de Premiación (Por Billete)</h4>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider px-3 mb-2">Tabla de Premiación (Por Billete)</h4>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <PrizeCard 
                 title="Primer Premio" 
                 prizeKey="firstPrize" 
@@ -113,7 +113,7 @@ export const BilleteSettingsSection: React.FC = () => {
           <button 
             onClick={handleSave}
             disabled={isSaving}
-            className="w-full bg-brand-primary text-black h-14 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40"
+            className="w-full bg-brand-primary text-black h-11 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40"
           >
             <Save size={18} />
             {isSaving ? 'Guardando Cambios...' : 'Guardar Configuración de Billete'}
@@ -146,13 +146,13 @@ interface PrizeCardProps {
 const PrizeCard: React.FC<PrizeCardProps> = ({ title, prizeKey, payouts, onUpdate, icon, colorClass }) => {
     return (
         <div className={cn("border rounded-2xl", colorClass)}>
-            <div className="flex items-center gap-3 p-4 border-b border-current">
+            <div className="flex items-center gap-3 px-3 py-2 border-b border-current">
                 <div className="w-8 h-8 flex items-center justify-center rounded-full bg-current/10">
                     {icon}
                 </div>
                 <h4 className="font-black text-sm uppercase tracking-wider text-white">{title}</h4>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="p-3 space-y-2">
                 <div className="form-group">
                     <label>4 Cifras Exactas</label>
                     <input type="number" value={payouts.exact4} onChange={(e) => onUpdate(prizeKey, 'exact4', e.target.value)} />

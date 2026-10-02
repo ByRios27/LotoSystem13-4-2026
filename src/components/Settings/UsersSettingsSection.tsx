@@ -5,8 +5,8 @@ import { db, auth, firebaseConfig } from '../../firebase';
 import { createUserWithEmailAndPassword, signOut, initializeAuth, inMemoryPersistence } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Users, Trash2, Edit, ChevronDown, ChevronUp, AlertTriangle, X } from 'lucide-react';
-import { generateSellerId } from '../../utils/helpers';
+import { UserPlus, Trash2, Edit, AlertTriangle, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import { generateSellerId, cn } from '../../utils/helpers';
 import { PinValidationModal } from '../PinValidationModal';
 
 
@@ -101,7 +101,7 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={onUserAdded}
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-4 bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/80 backdrop-blur-sm"
     >
       <motion.div
         initial={{ scale: 0.9, y: 50 }}
@@ -113,14 +113,14 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
         <div className="px-4 py-3 flex items-center justify-between bg-white/5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <UserPlus size={16} className="text-brand-primary" />
-            <h3 className="font-black text-white text-base uppercase tracking-wider">Nuevo Usuario</h3>
+            <h3 className="font-black text-white text-sm uppercase tracking-wider">Nuevo Usuario</h3>
           </div>
           <button type="button" onClick={onUserAdded} className="p-1.5 bg-white/10 rounded-full active:scale-95 transition-all text-slate-300">
             <X size={16} />
           </button>
         </div>
 
-        <form onSubmit={handleCreateUser} className="p-4 space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar [&_.form-group]:!p-0 [&_.form-group]:!border-0 [&_.form-group]:!bg-transparent [&_.form-group>label]:!mb-0.5 [&_.form-group>label]:!text-slate-200 [&_.form-group>label]:whitespace-nowrap [&_.form-group>input]:!py-1.5 [&_.form-group>input]:!border-white/20 [&_.form-group>select]:!py-1.5 [&_.form-group>select]:!border-white/20">
+        <form onSubmit={handleCreateUser} className="form-compact p-4 space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar">
           <div className="form-group">
             <label>Nombre Completo</label>
             <input type="text" placeholder="Ej. Juan Pérez" value={name} onChange={e => setName(e.target.value)} required />
@@ -225,62 +225,71 @@ export const UsersSettingsSection = () => {
   }
 
   return (
-    <div className="settings-section">
-      <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Users size={20}/> Gestión de Usuarios</h2>
-      
-      <button onClick={() => setIsAddingUser(true)} className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider inline-flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all mb-4">
-        <UserPlus size={16}/>
-        Añadir Usuario
-      </button>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 px-2">
+        <div>
+          <h2 className="text-sm font-black text-white uppercase tracking-widest">Gestión de Usuarios</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Crea y administra los usuarios.</p>
+        </div>
+        <button onClick={() => setIsAddingUser(true)} className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all shrink-0 whitespace-nowrap">
+          <UserPlus size={16}/>
+          Añadir Usuario
+        </button>
+      </div>
 
       <AnimatePresence>
         {isAddingUser && <AddUserForm onUserAdded={() => setIsAddingUser(false)} />}
       </AnimatePresence>
 
-      <div className="mt-6 space-y-2">
+      <div className="space-y-2">
         {sortedUsers.filter(u => u.id !== currentUser.id).map(user => (
-             <div key={user.id} className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+             <div key={user.id} className={cn("bg-white/5 rounded-2xl border p-3", user.status === 'active' ? "border-white/10" : "border-red-500/20 opacity-70")}>
                 {editingUser?.id === user.id ? (
                     // Editing View
-                    <div className="space-y-3">
-                        <input value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})} className="input"/>
-                        <input value={editingUser.pin} onChange={e => setEditingUser({...editingUser, pin: e.target.value})} className="input" maxLength={4}/>
-                        <input type="text" inputMode="numeric" value={Math.round(editingUser.commission * 100)} onChange={e => setEditingUser({...editingUser, commission: Math.min(100, Number(e.target.value.replace(/\D/g, '')) || 0) / 100})} className="input"/>
-                        <select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as User['role']})} className="input">
-                            {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-                        </select>
-                        <div className="flex justify-end gap-2">
-                            <button onClick={() => handleUpdateUser(editingUser)} className="button-primary">Guardar</button>
-                            <button onClick={() => setEditingUser(null)} className="button-secondary">Cancelar</button>
+                    <div className="form-compact space-y-2">
+                        <div className="form-group"><label>Nombre</label><input value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})}/></div>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <div className="form-group"><label>PIN</label><input inputMode="numeric" value={editingUser.pin} onChange={e => setEditingUser({...editingUser, pin: e.target.value.replace(/\D/g, '')})} maxLength={4}/></div>
+                            <div className="form-group"><label>Comisión (%)</label><input type="text" inputMode="numeric" value={Math.round(editingUser.commission * 100)} onChange={e => setEditingUser({...editingUser, commission: Math.min(100, Number(e.target.value.replace(/\D/g, '')) || 0) / 100})}/></div>
+                        </div>
+                        <div className="form-group"><label>Rol</label>
+                            <select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as User['role']})}>
+                                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex gap-3 pt-1">
+                            <button onClick={() => setEditingUser(null)} className="w-full bg-white/10 text-white/80 h-10 rounded-2xl font-black uppercase text-sm tracking-widest active:scale-95 transition-all">Cancelar</button>
+                            <button onClick={() => handleUpdateUser(editingUser)} className="w-full bg-brand-primary text-black h-10 rounded-2xl font-black uppercase text-sm tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-all">Guardar</button>
                         </div>
                     </div>
                 ) : (
                     // Default View
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-bold text-white">{user.name} <span className="text-xs font-mono text-slate-400">@{user.username}</span></p>
-                            <p className="text-xs text-slate-300">Rol: {user.role} - Comisión: {Math.round(user.commission * 100)}%</p>
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-sm text-white tracking-tight truncate">{user.name}</h4>
+                                {user.status !== 'active' && (
+                                    <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-[8px] font-black uppercase tracking-widest rounded-md border border-red-500/30">Inactivo</span>
+                                )}
+                            </div>
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5 truncate">@{user.username} · {user.role} · {Math.round(user.commission * 100)}%</p>
                         </div>
-                        <div className="flex items-center gap-3">
-                             <label className="flex items-center cursor-pointer">
-                                <div className="relative">
-                                    <input type="checkbox" checked={user.status === 'active'} onChange={() => toggleUserStatus(user)} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                                </div>
-                                <span className="ml-3 text-xs font-medium text-gray-300">{user.status === 'active' ? 'Activo' : 'Inactivo'}</span>
-                            </label>
-                            <button onClick={() => setEditingUser(user)} className="p-2 text-slate-400 hover:text-white"><Edit size={16}/></button>
-                            <button onClick={() => setConfirmDelete(user.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                        <div className="flex items-center shrink-0">
+                            <button onClick={() => toggleUserStatus(user)} className={cn("p-2 rounded-lg transition-all active:scale-90", user.status === 'active' ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-400")}>
+                                {user.status === 'active' ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                            </button>
+                            <button onClick={() => setEditingUser(user)} className="p-2 rounded-lg text-slate-500 hover:text-white transition-colors"><Edit size={16}/></button>
+                            <button onClick={() => setConfirmDelete(user.id)} className="p-2 rounded-lg text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                         </div>
                     </div>
                 )}
                 {confirmDelete === user.id && (
-                    <div className="mt-4 bg-red-900/50 border border-red-500/30 rounded-lg p-4 text-center">
-                        <p className="font-bold text-white">¿Seguro que quieres eliminar a este usuario?</p>
-                        <p className="text-xs text-red-200 mb-4">Esta acción no se puede deshacer.</p>
-                        <div className="flex justify-center gap-4">
-                            <button onClick={() => handleDeleteUser(user.id)} className="button-danger">Sí, Eliminar</button>
-                            <button onClick={() => setConfirmDelete(null)} className="button-secondary">Cancelar</button>
+                    <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
+                        <p className="font-bold text-sm text-white">¿Seguro que quieres eliminar a este usuario?</p>
+                        <p className="text-xs text-red-300 mb-3">Esta acción no se puede deshacer.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setConfirmDelete(null)} className="w-full bg-white/10 text-white/80 h-10 rounded-2xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all">Cancelar</button>
+                            <button onClick={() => handleDeleteUser(user.id)} className="w-full bg-red-500 text-white h-10 rounded-2xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all">Sí, Eliminar</button>
                         </div>
                     </div>
                 )}

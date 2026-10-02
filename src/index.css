@@ -57,6 +57,21 @@
    .form-group-inline > label {
     @apply text-xs font-bold text-white uppercase tracking-wider mb-0;
   }
+
+  /* Compact variant shared by every settings form and modal. */
+  .form-compact .form-group {
+    @apply p-0 border-0 bg-transparent;
+  }
+  .form-compact .form-group > label {
+    @apply mb-0.5 text-slate-200 whitespace-nowrap;
+  }
+  .form-compact .form-group > input,
+  .form-compact .form-group > select {
+    @apply py-1.5 border-white/20;
+  }
+  .form-compact .form-group-inline {
+    @apply px-3 py-2;
+  }
 }
 
 

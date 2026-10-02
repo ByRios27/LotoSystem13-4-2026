@@ -8,7 +8,7 @@ export const SpecialPlaysSettingsSection: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'pale' | 'billete'>('pale');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
         <div className="flex items-center justify-between px-2">
             <div>
                 <h2 className="text-sm font-black text-white uppercase tracking-widest">Jugadas Especiales</h2>
@@ -20,22 +20,22 @@ export const SpecialPlaysSettingsSection: React.FC = () => {
         <button
           onClick={() => setActiveSubTab('pale')}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+            "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
             activeSubTab === 'pale' ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" : "text-slate-400 hover:text-white"
           )}
         >
           <Zap size={16} />
-          Configuración de Palé
+          Palé
         </button>
         <button
           onClick={() => setActiveSubTab('billete')}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+            "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
             activeSubTab === 'billete' ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" : "text-slate-400 hover:text-white"
           )}
         >
           <Ticket size={16} />
-          Configuración de Billete
+          Billete
         </button>
       </div>
 

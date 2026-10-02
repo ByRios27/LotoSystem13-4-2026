@@ -15,7 +15,7 @@ export const ChancePricesSettings: React.FC = () => {
   const sortedPrices = [...(settings.chancePrices || [])].sort((a, b) => (a.isDefault ? -1 : 1));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
         <div className="flex items-center justify-between px-2">
             <div>
                 <h2 className="text-sm font-black text-white uppercase tracking-widest">Precios de Chances</h2>
@@ -24,7 +24,7 @@ export const ChancePricesSettings: React.FC = () => {
             <PermissionGuard allowedRoles={['CEO']}>
                 <button 
                     onClick={() => setIsAdding(true)}
-                    className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all"
+                    className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all shrink-0 whitespace-nowrap"
                 >
                     <Plus size={16} />
                     Añadir Precio
@@ -38,7 +38,7 @@ export const ChancePricesSettings: React.FC = () => {
         )}
       </AnimatePresence>
       
-      <div className="space-y-3">
+      <div className="space-y-2">
         {sortedPrices.length > 0 ? sortedPrices.map(price => (
           <PriceItem key={price.id} price={price} />
         )) : (
@@ -83,15 +83,15 @@ const PriceItem: React.FC<PriceItemProps> = ({ price }) => {
         {isEditing ? (
              <PriceFormModal price={price} onClose={() => setIsEditing(false)} />
         ) : (
-            <motion.div layout className="bg-white/5 rounded-2xl border border-white/10 p-4">
+            <motion.div layout className="bg-white/5 rounded-2xl border border-white/10 p-3">
                 <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                         <button onClick={handleSetDefault} title="Marcar como predeterminado">
                             <Star size={20} className={cn("transition-all mt-0.5", price.isDefault ? 'text-yellow-400 fill-yellow-400' : 'text-slate-600 hover:text-yellow-400')} />
                         </button>
                         <div>
-                            <p className="font-bold text-base text-white">{price.name} <span className='font-mono text-sm text-slate-400'>(${price.value.toFixed(2)})</span></p>
-                            <div className="flex gap-4 mt-1.5">
+                            <p className="font-bold text-sm text-white">{price.name} <span className='font-mono text-xs text-slate-400'>(${price.value.toFixed(2)})</span></p>
+                            <div className="flex gap-4 mt-1">
                                 <p className="text-xs text-slate-400"><span className='font-bold text-slate-300'>1er:</span> ${price.payouts.first.toFixed(2)}</p>
                                 <p className="text-xs text-slate-400"><span className='font-bold text-slate-300'>2do:</span> ${price.payouts.second.toFixed(2)}</p>
                                 <p className="text-xs text-slate-400"><span className='font-bold text-slate-300'>3er:</span> ${price.payouts.third.toFixed(2)}</p>
@@ -100,8 +100,8 @@ const PriceItem: React.FC<PriceItemProps> = ({ price }) => {
                     </div>
                     <PermissionGuard allowedRoles={['CEO']}>
                         <div className="flex items-center gap-1">
-                           <button onClick={() => setIsEditing(true)} className="p-2.5 rounded-lg text-slate-500 hover:text-white transition-colors"><Edit size={16}/></button>
-                           {!price.isDefault && <button onClick={handleDelete} className="p-2.5 rounded-lg text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>}
+                           <button onClick={() => setIsEditing(true)} className="p-2 rounded-lg text-slate-500 hover:text-white transition-colors"><Edit size={16}/></button>
+                           {!price.isDefault && <button onClick={handleDelete} className="p-2 rounded-lg text-slate-600 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>}
                         </div>
                     </PermissionGuard>
                 </div>
@@ -185,20 +185,24 @@ const PriceFormModal: React.FC<PriceFormModalProps> = ({ price, onClose }) => {
     }
 
     return (
-         <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+         <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-black/80 backdrop-blur-sm">
             <motion.div
                 initial={{ opacity: 0, y: 50 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ type: 'spring', damping: 30, stiffness: 250 }}
-                className="bg-[#0B1220] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative"
+                className="bg-[#0C1422] w-full max-w-[368px] rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative"
             >
-            <div className="p-5 flex flex-col items-center justify-center text-center bg-brand-primary/10 border-b border-brand-primary/20">
-                <Tag size={40} className="text-brand-primary mb-3"/>
-                <h3 className="text-lg font-black text-white">{price ? 'Editar Precio' : 'Añadir Nuevo Precio'}</h3>
-                <p className="text-xs text-slate-300 font-medium max-w-[300px]">Define un nombre, valor y los pagos correspondientes para este precio.</p>
+            <div className="px-4 py-3 flex items-center justify-between bg-white/5 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                    <Tag size={16} className="text-brand-primary" />
+                    <h3 className="font-black text-white text-sm uppercase tracking-wider">{price ? 'Editar Precio' : 'Nuevo Precio'}</h3>
+                </div>
+                <button type="button" onClick={onClose} className="p-1.5 bg-white/10 rounded-full active:scale-95 transition-all text-slate-300">
+                    <X size={16} />
+                </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[70vh] overflow-y-auto no-scrollbar">
+            <form onSubmit={handleSubmit} className="form-compact p-4 space-y-2.5 max-h-[70vh] overflow-y-auto no-scrollbar">
                 <div className='form-group'>
                     <label>Nombre del Precio</label>
                     <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Ej: Chance Normal" />
@@ -207,9 +211,9 @@ const PriceFormModal: React.FC<PriceFormModalProps> = ({ price, onClose }) => {
                     <label>Valor por Chance ($)</label>
                     <input type="number" name="value" value={formData.value} onChange={handleChange} placeholder="Ej: 0.50" step="0.01"/>
                 </div>
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Pagos por Posición (Multiplicador)</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-200 uppercase tracking-widest mb-0.5">Pagos por Posición (Multiplicador)</label>
+                  <div className="grid grid-cols-3 gap-2.5">
                       <div className="form-group">
                           <label>1ra Posición</label>
                           <input type="number" name="payouts.first" value={formData.payouts.first} onChange={handleChange} placeholder="Ej: 60"/>
@@ -235,11 +239,11 @@ const PriceFormModal: React.FC<PriceFormModalProps> = ({ price, onClose }) => {
                     </motion.div>
                 )}
 
-                <div className="flex gap-3 pt-2">
-                    <button type="button" onClick={onClose} className="w-full bg-white/10 text-white/80 h-12 rounded-2xl font-black uppercase text-sm tracking-widest active:scale-95 transition-all">
+                <div className="flex gap-3 pt-1">
+                    <button type="button" onClick={onClose} className="w-full bg-white/10 text-white/80 h-10 rounded-2xl font-black uppercase text-sm tracking-widest active:scale-95 transition-all">
                         Cancelar
                     </button>
-                    <button type="submit" disabled={isSaving} className="w-full bg-brand-primary text-black h-12 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40">
+                    <button type="submit" disabled={isSaving} className="w-full bg-brand-primary text-black h-10 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40">
                         {isSaving ? 'Guardando...' : (price ? 'Actualizar Precio' : 'Añadir Precio')}
                     </button>
                 </div>

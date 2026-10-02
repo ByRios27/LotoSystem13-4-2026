@@ -5,7 +5,7 @@ import { db, auth, firebaseConfig } from '../../firebase';
 import { createUserWithEmailAndPassword, signOut, initializeAuth, inMemoryPersistence } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Users, Trash2, Edit, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { UserPlus, Users, Trash2, Edit, ChevronDown, ChevronUp, AlertTriangle, X } from 'lucide-react';
 import { generateSellerId } from '../../utils/helpers';
 import { PinValidationModal } from '../PinValidationModal';
 
@@ -33,7 +33,7 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
-  const [commission, setCommission] = useState(0.25);
+  const [commission, setCommission] = useState('25');
   const [role, setRole] = useState<User['role']>('seller');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +53,10 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
         setError('El PIN debe contener exactamente 4 números.');
         return;
     }
+    if (!/^\d+$/.test(commission) || Number(commission) > 100) {
+      setError('La comisión debe ser un número entero entre 0 y 100.');
+      return;
+    }
     if (!password || password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres.');
       return;
@@ -68,7 +72,7 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
         username: username.toLowerCase().trim(),
         email: `${username.toLowerCase().trim()}@lottopro.system`,
         pin,
-        commission,
+        commission: Number(commission) / 100,
         role,
         status: 'active',
         sellerId: generateSellerId(),
@@ -92,27 +96,79 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
   };
 
   return (
-    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 overflow-hidden">
-      <form onSubmit={handleCreateUser} className="space-y-4">
-        <h3 className="font-bold text-lg text-white mb-2">Añadir Nuevo Usuario</h3>
-        {error && <p className="text-red-500 text-sm bg-red-500/10 p-3 rounded-lg">{error}</p>}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="Nombre Completo" value={name} onChange={e => setName(e.target.value)} required className="input" />
-            <input type="text" placeholder="Nombre de Usuario" value={username} onChange={e => setUsername(e.target.value)} required className="input" />
-            <input type="text" placeholder="PIN (4 dígitos)" value={pin} onChange={e => setPin(e.target.value)} required className="input" maxLength={4} />
-            <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} required className="input" />
-            <select value={role} onChange={e => setRole(e.target.value as User['role'])} className="input">
-                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-            </select>
-            <input type="number" step="0.01" min="0" max="1" placeholder="Comisión (ej: 0.25)" value={commission} onChange={e => setCommission(parseFloat(e.target.value))} required className="input" />
-        </div>
-        <div className="flex justify-end gap-4">
-          <button type="submit" disabled={loading} className="button-primary">
-            {loading ? 'Creando...' : 'Crear Usuario'}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onUserAdded}
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-4 bg-black/80 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 50 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-[#0C1422] w-full max-w-[368px] rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative"
+      >
+        <div className="px-4 py-3 flex items-center justify-between bg-white/5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <UserPlus size={16} className="text-brand-primary" />
+            <h3 className="font-black text-white text-base uppercase tracking-wider">Nuevo Usuario</h3>
+          </div>
+          <button type="button" onClick={onUserAdded} className="p-1.5 bg-white/10 rounded-full active:scale-95 transition-all text-slate-300">
+            <X size={16} />
           </button>
-          <button type="button" onClick={onUserAdded} className="button-secondary">Cancelar</button>
         </div>
-      </form>
+
+        <form onSubmit={handleCreateUser} className="p-4 space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar [&_.form-group]:!p-0 [&_.form-group]:!border-0 [&_.form-group]:!bg-transparent [&_.form-group>label]:!mb-0.5 [&_.form-group>label]:!text-slate-200 [&_.form-group>label]:whitespace-nowrap [&_.form-group>input]:!py-1.5 [&_.form-group>input]:!border-white/20 [&_.form-group>select]:!py-1.5 [&_.form-group>select]:!border-white/20">
+          <div className="form-group">
+            <label>Nombre Completo</label>
+            <input type="text" placeholder="Ej. Juan Pérez" value={name} onChange={e => setName(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Nombre de Usuario</label>
+            <input type="text" placeholder="Ej. juanp" value={username} onChange={e => setUsername(e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="form-group">
+              <label>PIN (4 dígitos)</label>
+              <input type="text" inputMode="numeric" placeholder="0000" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} required maxLength={4} />
+            </div>
+            <div className="form-group">
+              <label>Contraseña</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="form-group">
+              <label>Rol</label>
+              <select value={role} onChange={e => setRole(e.target.value as User['role'])}>
+                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Comisión (%)</label>
+              <input type="text" inputMode="numeric" placeholder="25" value={commission} onChange={e => setCommission(e.target.value.replace(/\D/g, '').slice(0, 3))} required />
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-3 text-rose-400 bg-rose-400/10 p-3.5 rounded-2xl border border-rose-400/20">
+              <AlertTriangle size={18} />
+              <p className="text-xs font-bold uppercase tracking-tight">{error}</p>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onUserAdded} className="w-full bg-white/10 text-white/80 h-10 rounded-2xl font-black uppercase text-sm tracking-widest active:scale-95 transition-all">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading} className="w-full bg-brand-primary text-black h-10 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all disabled:opacity-40">
+              {loading ? 'Creando...' : 'Crear Usuario'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
     </motion.div>
   );
 };
@@ -172,12 +228,10 @@ export const UsersSettingsSection = () => {
     <div className="settings-section">
       <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Users size={20}/> Gestión de Usuarios</h2>
       
-      {!isAddingUser && (
-        <button onClick={() => setIsAddingUser(true)} className="button-primary inline-flex items-center gap-2 mb-4">
-          <UserPlus size={18}/>
-          Añadir Usuario
-        </button>
-      )}
+      <button onClick={() => setIsAddingUser(true)} className="bg-brand-primary text-black px-4 h-10 rounded-xl font-bold text-xs uppercase tracking-wider inline-flex items-center gap-2 shadow-lg shadow-brand-primary/20 active:scale-95 transition-all mb-4">
+        <UserPlus size={16}/>
+        Añadir Usuario
+      </button>
 
       <AnimatePresence>
         {isAddingUser && <AddUserForm onUserAdded={() => setIsAddingUser(false)} />}
@@ -191,7 +245,7 @@ export const UsersSettingsSection = () => {
                     <div className="space-y-3">
                         <input value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})} className="input"/>
                         <input value={editingUser.pin} onChange={e => setEditingUser({...editingUser, pin: e.target.value})} className="input" maxLength={4}/>
-                        <input type="number" value={editingUser.commission} onChange={e => setEditingUser({...editingUser, commission: parseFloat(e.target.value)})} className="input"/>
+                        <input type="text" inputMode="numeric" value={Math.round(editingUser.commission * 100)} onChange={e => setEditingUser({...editingUser, commission: Math.min(100, Number(e.target.value.replace(/\D/g, '')) || 0) / 100})} className="input"/>
                         <select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as User['role']})} className="input">
                             {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
                         </select>
@@ -205,7 +259,7 @@ export const UsersSettingsSection = () => {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="font-bold text-white">{user.name} <span className="text-xs font-mono text-slate-400">@{user.username}</span></p>
-                            <p className="text-xs text-slate-300">Rol: {user.role} - Comisión: {user.commission * 100}%</p>
+                            <p className="text-xs text-slate-300">Rol: {user.role} - Comisión: {Math.round(user.commission * 100)}%</p>
                         </div>
                         <div className="flex items-center gap-3">
                              <label className="flex items-center cursor-pointer">

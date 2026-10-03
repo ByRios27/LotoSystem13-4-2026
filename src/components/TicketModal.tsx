@@ -13,6 +13,7 @@ import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidt
 import { getDefaultThermalPrinter, isNativePrinterAvailable, printThermalText } from '../services/printerService';
 import { createThermalReceiptPdf } from '../utils/thermalReceiptPdf';
 import { createThermalReceiptImages } from '../utils/thermalReceiptImage';
+import { createNormalTicketPdf } from '../utils/normalTicketPdf';
 import { AnimatePresence, motion } from 'motion/react';
 
 interface TicketModalProps {
@@ -28,7 +29,9 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>(58);
   
   const draws = useStore((state) => state.draws);
+  const settings = useStore((state) => state.settings);
   const fileName = `ticket-${ticket.id.substring(0, 8)}.png`;
+  const normalTicketFileName = `ticket-${ticket.id.substring(0, 8)}.pdf`;
   const thermalFileName = `recibo-${ticket.id.substring(0, 8)}.png`;
 
   useEffect(() => {
@@ -49,8 +52,11 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
     })
     .join(' | ');
 
+  const singleDrawName = ticket.drawIds.length === 1
+    ? ticket.drawNames?.[0] || draws.find((draw) => draw.id === ticket.drawIds[0])?.name || 'Sorteo'
+    : '';
   const digitalShareText = ticket.drawIds.length === 1
-    ? `Ticket para ${ticketDrawSummary || ticket.drawNames?.[0] || 'Sorteo'}\nTotal de venta: $${formatCurrency(ticket.total)}`
+    ? `Ticket para ${singleDrawName}\nTotal de venta: $${formatCurrency(ticket.total)}`
     : `Ticket ${ticket.id.slice(0, 8).toUpperCase()}\nTotal de venta: $${formatCurrency(ticket.total)}`;
 
   const pdfBytesToBase64 = (bytes: Uint8Array): string => {
@@ -77,16 +83,15 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   };
 
   const handleShare = async () => {
-    if (!graphicReceiptRef.current) return;
-
+    setIsPrinting(true);
     try {
-      const dataUrl = await exportNodeAsPng(graphicReceiptRef.current);
+      const pdfBytes = await createNormalTicketPdf(ticket, draws, settings);
+      const pdfBase64 = pdfBytesToBase64(pdfBytes);
 
       if (Capacitor.isNativePlatform()) {
-        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
         const saved = await Filesystem.writeFile({
-          path: fileName,
-          data: base64Data,
+          path: normalTicketFileName,
+          data: pdfBase64,
           directory: Directory.Cache,
           recursive: true,
         });
@@ -98,22 +103,25 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
           dialogTitle: 'Compartir Ticket',
         });
       } else {
-        const blob = await (await fetch(dataUrl)).blob();
-        const file = new File([blob], fileName, { type: 'image/png' });
+        const blob = new Blob([pdfBytes.slice().buffer], { type: 'application/pdf' });
+        const file = new File([blob], normalTicketFileName, { type: 'application/pdf' });
 
         if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
           await navigator.share({ files: [file], title: 'Ticket de Lotería', text: digitalShareText });
         } else {
           const link = document.createElement('a');
-          link.download = fileName;
-          link.href = dataUrl;
+          link.download = normalTicketFileName;
+          link.href = URL.createObjectURL(blob);
           link.click();
+          window.setTimeout(() => URL.revokeObjectURL(link.href), 30000);
         }
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       console.error('Error al compartir el ticket:', err);
       alert('No se pudo compartir el ticket.');
+    } finally {
+      setIsPrinting(false);
     }
   };
 

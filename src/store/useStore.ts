@@ -198,6 +198,23 @@ const defaultPayouts = { first: 60, second: 8, third: 4 };
 
 const defaultDraws: Draw[] = [];
 
+const stripUndefinedFields = (value: any): any => {
+  if (Array.isArray(value)) {
+    return value.map((item) => item === undefined ? null : stripUndefinedFields(item));
+  }
+  if (value && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([, item]) => item !== undefined)
+          .map(([key, item]) => [key, stripUndefinedFields(item)])
+      );
+    }
+  }
+  return value;
+};
+
 if (typeof window !== 'undefined') {
   window.localStorage.removeItem('lottopro-storage');
 }
@@ -413,7 +430,7 @@ export const useStore = create<AppState>()(
         if (auth.currentUser) {
           console.log('updating ticket...', id);
           try {
-            await updateDoc(doc(db, 'tickets', id), finalTicket as any);
+            await updateDoc(doc(db, 'tickets', id), stripUndefinedFields(finalTicket));
             console.log('ticket updated', id);
           } catch (err) {
             console.error('ticket update failed', err);

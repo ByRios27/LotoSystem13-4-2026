@@ -32,7 +32,7 @@ export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
   };
 
   return (
-    <div className="w-full bg-white text-slate-900 p-6 font-sans shadow-sm flex flex-col gap-6 min-h-[600px]">
+    <div className="w-full bg-white text-slate-900 px-2 py-6 font-sans shadow-sm flex flex-col gap-6 min-h-[600px]">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>

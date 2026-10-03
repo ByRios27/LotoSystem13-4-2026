@@ -14,7 +14,8 @@ import {
   Layers,
   FileText,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  X
 } from 'lucide-react';
 
 interface DetailProps {
@@ -25,11 +26,13 @@ interface DetailProps {
 }
 
 export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onShare, isLoss }) => {
-  const { deleteTicket, setReusedTicket, setEditingTicket, setCurrentPage: setGlobalPage } = useStore();
+  const { deleteTicket, setReusedTicket, setEditingTicket, setEditingDrawIds, setCurrentPage: setGlobalPage } = useStore();
   const [currentPage, setCurrentPage] = useState(1);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [ticketToDelete, setTicketToDelete] = useState<string | null>(null);
   const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState('');
+  const [editOptionsTicket, setEditOptionsTicket] = useState<Ticket | null>(null);
   const itemsPerPage = 5;
   
   const draws = useStore(state => state.draws);
@@ -89,10 +92,27 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
     setGlobalPage('sales');
   };
 
-  const handleEdit = (ticket: Ticket) => {
+  const getEditableDrawIds = (ticket: Ticket): string[] => (ticket.drawIds || (ticket.drawId ? [ticket.drawId] : []))
+    .filter((id) => {
+      const draw = draws.find((item) => item.id === id);
+      return !!draw && getDrawStatus(draw) === 'open';
+    });
+
+  const beginEdit = (ticket: Ticket, editableDrawIds: string[]) => {
     setReusedTicket(null);
+    setEditingDrawIds(editableDrawIds);
     setEditingTicket(ticket);
     setGlobalPage('sales');
+  };
+
+  const handleEdit = (ticket: Ticket) => {
+    const editableDrawIds = getEditableDrawIds(ticket);
+    if (editableDrawIds.length === 0) return;
+    if (editableDrawIds.length > 1 && ticket.drawIds.length > 1) {
+      setEditOptionsTicket(ticket);
+      return;
+    }
+    beginEdit(ticket, editableDrawIds);
   };
 
   const handleDeleteClick = (id: string) => {
@@ -103,10 +123,13 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
   const handleConfirmDelete = async () => {
     if (ticketToDelete) {
       try {
-        await deleteTicket(ticketToDelete);
+        const result = await deleteTicket(ticketToDelete);
         setTicketToDelete(null);
         setIsPinModalOpen(false);
         setShowDeleteSuccess(true);
+        setDeleteMessage(result.deleted
+          ? 'Ticket eliminado.'
+          : 'Se eliminaron las jugadas abiertas; los sorteos cerrados o con resultados se conservaron.');
         window.setTimeout(() => setShowDeleteSuccess(false), 2500);
       } catch (error) {
         console.error('Ticket delete failed', error);
@@ -120,7 +143,7 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
       {showDeleteSuccess && (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-300">
           <CheckCircle2 size={14} />
-          Venta eliminada correctamente.
+          {deleteMessage}
         </div>
       )}
       {totalPages > 1 && (
@@ -155,6 +178,9 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
       <div className="space-y-1.5">
         {currentTickets.map((ticket) => {
           const hasPrize = ticket.calculatedTotalPrize > 0;
+          const editableDrawIds = getEditableDrawIds(ticket);
+          const canEditCurrentDraw = editableDrawIds.includes(drawId);
+          const canDeleteOpenDraws = editableDrawIds.length > 0;
           
           return (
             <div 
@@ -211,18 +237,15 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                   <button aria-label="Reutilizar ticket" onClick={() => handleReuse(ticket)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-white/15 text-white hover:bg-white/25" : "bg-white/5 text-slate-300 hover:bg-white/10")}>
                     <RefreshCw size={13} />
                   </button>
-                  {(!ticket.drawIds || !ticket.drawIds.some(id => {
-                    const d = useStore.getState().draws.find(d => d.id === id);
-                    return d ? getDrawStatus(d) === 'closed' : true;
-                  })) && (
-                    <>
-                      <button aria-label="Editar ticket" onClick={() => handleEdit(ticket)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-white/15 text-white hover:bg-white/25" : "bg-white/5 text-slate-300 hover:bg-white/10")}>
-                        <Edit2 size={13} />
-                      </button>
-                      <button aria-label="Eliminar ticket" onClick={() => handleDeleteClick(ticket.id)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-red-950 text-white hover:bg-red-900" : "bg-white/5 text-slate-300 hover:bg-rose-500/20 hover:text-rose-300")}>
-                        <Trash2 size={13} />
-                      </button>
-                    </>
+                  {canEditCurrentDraw && (
+                    <button aria-label="Editar ticket" onClick={() => handleEdit(ticket)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-white/15 text-white hover:bg-white/25" : "bg-white/5 text-slate-300 hover:bg-white/10")}>
+                      <Edit2 size={13} />
+                    </button>
+                  )}
+                  {canDeleteOpenDraws && (
+                    <button aria-label="Eliminar ticket" onClick={() => handleDeleteClick(ticket.id)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-red-950 text-white hover:bg-red-900" : "bg-white/5 text-slate-300 hover:bg-rose-500/20 hover:text-rose-300")}>
+                      <Trash2 size={13} />
+                    </button>
                   )}
                 </div>
               </div>
@@ -264,6 +287,42 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
         </div>
       )}
 
+      {editOptionsTicket && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setEditOptionsTicket(null)}>
+          <div className="w-full max-w-xs space-y-3 rounded-2xl border border-white/10 bg-[#121A2B] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-white">Editar ticket múltiple</h3>
+                <p className="mt-1 text-xs text-slate-400">Los sorteos cerrados o con resultados se conservarán sin cambios.</p>
+              </div>
+              <button type="button" onClick={() => setEditOptionsTicket(null)} className="rounded-lg p-1 text-slate-500 hover:text-white"><X size={16} /></button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const ids = getEditableDrawIds(editOptionsTicket);
+                setEditOptionsTicket(null);
+                beginEdit(editOptionsTicket, [drawId].filter((id) => ids.includes(id)));
+              }}
+              className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left text-xs font-black uppercase tracking-wide text-white"
+            >
+              Editar solo {draws.find((draw) => draw.id === drawId)?.name || 'este sorteo'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const ids = getEditableDrawIds(editOptionsTicket);
+                setEditOptionsTicket(null);
+                beginEdit(editOptionsTicket, ids);
+              }}
+              className="w-full rounded-xl bg-brand-primary p-3 text-left text-xs font-black uppercase tracking-wide text-black"
+            >
+              Editar todos los sorteos abiertos
+            </button>
+          </div>
+        </div>
+      )}
+
       <PinValidationModal 
         isOpen={isPinModalOpen}
         onClose={() => {
@@ -272,7 +331,7 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
         }}
         onSuccess={handleConfirmDelete}
         title="Eliminar Ticket"
-        description="Confirma tu PIN para eliminar esta venta."
+        description="Se borrarán solo las jugadas de sorteos abiertos y sin resultados. Los sorteos cerrados o con resultados se conservarán."
       />
     </div>
   );

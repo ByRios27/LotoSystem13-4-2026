@@ -35,6 +35,7 @@ export const SalesPanel: React.FC = () => {
     reusedTicket, 
     setReusedTicket, 
     editingTicket,
+    editingDrawIds,
     setEditingTicket,
     nextTicketSequence, 
     incrementSequence,
@@ -185,15 +186,17 @@ export const SalesPanel: React.FC = () => {
   useEffect(() => {
     if (editingTicket) {
       const normalizedGroups = normalizeTicketDrawEntries(editingTicket);
-      const nextDrawIds = normalizedGroups.map((group) => group.drawId);
+      const nextDrawIds = (editingDrawIds || normalizedGroups.map((group) => group.drawId))
+        .filter((drawId) => normalizedGroups.some((group) => group.drawId === drawId));
+      const selectedGroups = normalizedGroups.filter((group) => nextDrawIds.includes(group.drawId));
 
       setSelectedDrawIds(nextDrawIds);
       setIsMultiMode(nextDrawIds.length > 1);
       setPrefilledCustomerName(editingTicket.customerName);
-      setDrawEntryMap(cloneDrawEntryMap(normalizedGroups));
+      setDrawEntryMap(cloneDrawEntryMap(selectedGroups));
       setEditingEntryDrawId(null);
     }
-  }, [editingTicket]);
+  }, [editingTicket, editingDrawIds]);
 
   useEffect(() => {
     if (selectedDrawIds.length === 0 && activeDraws.length > 0) {

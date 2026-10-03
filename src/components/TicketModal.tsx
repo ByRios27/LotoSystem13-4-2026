@@ -7,13 +7,12 @@ import { ThermalReceipt } from './Sales/ThermalReceipt';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share as CapacitorShare } from '@capacitor/share';
-import { exportNodeAsPng } from '../utils/shareImage';
+import { exportNodeAsAdaptivePng, exportNodeAsPng } from '../utils/shareImage';
 import { formatAMPM, formatCurrency } from '../utils/helpers';
 import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidth } from '../utils/thermalReceipt';
 import { getDefaultThermalPrinter, isNativePrinterAvailable, printThermalText } from '../services/printerService';
 import { createThermalReceiptPdf } from '../utils/thermalReceiptPdf';
 import { createThermalReceiptImages } from '../utils/thermalReceiptImage';
-import { createNormalTicketPdf } from '../utils/normalTicketPdf';
 import { AnimatePresence, motion } from 'motion/react';
 
 interface TicketModalProps {
@@ -29,9 +28,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>(58);
   
   const draws = useStore((state) => state.draws);
-  const settings = useStore((state) => state.settings);
   const fileName = `ticket-${ticket.id.substring(0, 8)}.png`;
-  const normalTicketFileName = `ticket-${ticket.id.substring(0, 8)}.pdf`;
   const thermalFileName = `recibo-${ticket.id.substring(0, 8)}.png`;
 
   useEffect(() => {
@@ -83,15 +80,16 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   };
 
   const handleShare = async () => {
+    if (!graphicReceiptRef.current) return;
     setIsPrinting(true);
     try {
-      const pdfBytes = await createNormalTicketPdf(ticket, draws, settings);
-      const pdfBase64 = pdfBytesToBase64(pdfBytes);
+      const dataUrl = await exportNodeAsAdaptivePng(graphicReceiptRef.current);
 
       if (Capacitor.isNativePlatform()) {
+        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
         const saved = await Filesystem.writeFile({
-          path: normalTicketFileName,
-          data: pdfBase64,
+          path: fileName,
+          data: base64Data,
           directory: Directory.Cache,
           recursive: true,
         });
@@ -103,17 +101,16 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
           dialogTitle: 'Compartir Ticket',
         });
       } else {
-        const blob = new Blob([pdfBytes.slice().buffer], { type: 'application/pdf' });
-        const file = new File([blob], normalTicketFileName, { type: 'application/pdf' });
+        const blob = await (await fetch(dataUrl)).blob();
+        const file = new File([blob], fileName, { type: 'image/png' });
 
         if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
           await navigator.share({ files: [file], title: 'Ticket de Lotería', text: digitalShareText });
         } else {
           const link = document.createElement('a');
-          link.download = normalTicketFileName;
-          link.href = URL.createObjectURL(blob);
+          link.download = fileName;
+          link.href = dataUrl;
           link.click();
-          window.setTimeout(() => URL.revokeObjectURL(link.href), 30000);
         }
       }
     } catch (err) {

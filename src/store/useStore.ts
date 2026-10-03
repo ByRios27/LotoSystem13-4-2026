@@ -6,7 +6,7 @@ import { collection, doc, setDoc, deleteDoc, updateDoc, deleteField, getDocs, wr
 import { signOut } from 'firebase/auth';
 import { calculateEntryPrize } from '../utils/prizeCalculator';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandler';
-import { generateSellerId } from '../utils/helpers';
+import { generateSellerId, getDrawStatus } from '../utils/helpers';
 import type { DrawEntryGroup } from '../utils/ticketUtils';
 import { getTicketFlatEntries, normalizeTicketDrawEntries } from '../utils/ticketUtils';
 
@@ -166,7 +166,7 @@ interface AppState {
   
   addTicket: (ticket: Ticket) => Promise<Ticket>;
   updateTicket: (id: string, ticket: Partial<Ticket>) => Promise<Ticket>;
-  deleteTicket: (id: string) => Promise<void>;
+  deleteTicket: (id: string, drawIds?: string[]) => Promise<{ deleted: boolean; removedDrawIds: string[]; preservedDrawIds: string[] }>;
   incrementSequence: () => void;
   
   addUser: (user: User) => void;
@@ -183,6 +183,8 @@ interface AppState {
   setReusedTicket: (ticket: Ticket | null) => void;
   editingTicket: Ticket | null;
   setEditingTicket: (ticket: Ticket | null) => void;
+  editingDrawIds: string[] | null;
+  setEditingDrawIds: (drawIds: string[] | null) => void;
   
   // Results Actions
   setResults: (drawId: string, results: string[]) => Promise<void>;
@@ -259,8 +261,10 @@ export const useStore = create<AppState>()(
       currentPage: 'sales',
       reusedTicket: null,
       editingTicket: null,
+      editingDrawIds: null,
       setReusedTicket: (ticket) => set({ reusedTicket: ticket }),
-      setEditingTicket: (ticket) => set({ editingTicket: ticket }),
+      setEditingTicket: (ticket) => set((state) => ({ editingTicket: ticket, editingDrawIds: ticket ? state.editingDrawIds : null })),
+      setEditingDrawIds: (drawIds) => set({ editingDrawIds: drawIds }),
       
       addDraw: (draw) => {
         if (auth.currentUser) {
@@ -358,17 +362,50 @@ export const useStore = create<AppState>()(
         }
 
         const mergedTicket = { ...existingTicket, ...updatedTicket };
-        const normalizedDrawEntries = normalizeTicketDrawEntries(mergedTicket);
-        const rate = typeof mergedTicket.commissionRateApplied === 'number'
-          ? mergedTicket.commissionRateApplied
+        const existingGroups = normalizeTicketDrawEntries(existingTicket);
+        const incomingGroups = normalizeTicketDrawEntries(mergedTicket);
+        const requestedDrawIds = get().editingDrawIds || (updatedTicket.drawIds ?? existingTicket.drawIds);
+        const editableDrawIds = new Set(requestedDrawIds.filter((drawId) => {
+          const draw = get().draws.find((item) => item.id === drawId);
+          return !!draw && getDrawStatus(draw) === 'open';
+        }));
+        if (editableDrawIds.size === 0) throw new Error('No quedan sorteos abiertos para editar.');
+
+        const incomingById = new Map(incomingGroups.map((group) => [group.drawId, group]));
+        const existingIds = new Set(existingGroups.map((group) => group.drawId));
+        const normalizedDrawEntries = existingGroups
+          .filter((group) => !editableDrawIds.has(group.drawId) || incomingById.has(group.drawId))
+          .map((group) => editableDrawIds.has(group.drawId) ? incomingById.get(group.drawId)! : group);
+        incomingGroups.forEach((group) => {
+          if (editableDrawIds.has(group.drawId) && !existingIds.has(group.drawId)) normalizedDrawEntries.push(group);
+        });
+        if (normalizedDrawEntries.length === 0) throw new Error('El ticket debe conservar al menos un sorteo.');
+
+        const drawIds = normalizedDrawEntries.map((group) => group.drawId);
+        const drawNames = normalizedDrawEntries.map((group) => group.drawName);
+        const flatEntries = getTicketFlatEntries({ ...mergedTicket, drawEntries: normalizedDrawEntries });
+        const total = Number(normalizedDrawEntries.reduce((sum, group) => sum + group.subtotal, 0).toFixed(2));
+        const rate = typeof existingTicket.commissionRateApplied === 'number'
+          ? existingTicket.commissionRateApplied
           : (get().currentUser?.commission ?? get().settings.commissionRate);
-        const total = typeof mergedTicket.total === 'number' ? mergedTicket.total : 0;
+        const drawMap = new Map(get().draws.map((draw) => [draw.id, draw]));
+        const totalPrize = normalizedDrawEntries.reduce((sum, group) => {
+          const draw = drawMap.get(group.drawId);
+          if (!draw?.results?.length) return sum;
+          return sum + group.entries.reduce((entrySum, entry) => entrySum + calculateEntryPrize(entry, draw, get().settings).prize, 0);
+        }, 0);
         const finalTicket: Ticket = {
           ...mergedTicket,
-          drawId: mergedTicket.drawIds?.[0],
-          entryTypes: Array.from(new Set(getTicketFlatEntries(mergedTicket).map((entry) => entry.type))),
+          drawId: drawIds[0],
+          drawIds,
+          drawNames,
+          entryTypes: Array.from(new Set(flatEntries.map((entry) => entry.type))),
           drawEntries: normalizedDrawEntries,
-          entries: getTicketFlatEntries(mergedTicket),
+          entries: flatEntries,
+          total,
+          totalPrize,
+          hasResults: normalizedDrawEntries.some((group) => (drawMap.get(group.drawId)?.results?.length || 0) === 3),
+          isWinner: totalPrize > 0,
           commissionRateApplied: rate,
           commission: Number((total * rate).toFixed(2)),
         };
@@ -376,7 +413,7 @@ export const useStore = create<AppState>()(
         if (auth.currentUser) {
           console.log('updating ticket...', id);
           try {
-            await updateDoc(doc(db, 'tickets', id), updatedTicket as any);
+            await updateDoc(doc(db, 'tickets', id), finalTicket as any);
             console.log('ticket updated', id);
           } catch (err) {
             console.error('ticket update failed', err);
@@ -386,23 +423,73 @@ export const useStore = create<AppState>()(
         }
         set((state) => ({
           tickets: state.tickets.map((t) => (t.id === id ? finalTicket : t)),
+          editingDrawIds: null,
         }));
-        return finalTicket;
+        return get().tickets.find((ticket) => ticket.id === id) || finalTicket;
       },
-      deleteTicket: async (id) => {
+      deleteTicket: async (id, requestedDrawIds) => {
         const ticketToDelete = get().tickets.find(t => t.id === id);
-        if (!ticketToDelete) return;
+        if (!ticketToDelete) return { deleted: false, removedDrawIds: [], preservedDrawIds: [] };
         try {
-          await releaseTicketLimits(ticketToDelete, get().settings);
+          const drawGroups = normalizeTicketDrawEntries(ticketToDelete);
+          const removedDrawIds = drawGroups
+            .filter((group) => {
+              const draw = get().draws.find((item) => item.id === group.drawId);
+              return !!draw && getDrawStatus(draw) === 'open' && (!requestedDrawIds || requestedDrawIds.includes(group.drawId));
+            })
+            .map((group) => group.drawId);
+          if (removedDrawIds.length === 0) throw new Error('Solo se pueden borrar las jugadas de sorteos abiertos y sin resultados.');
+
+          const removedDrawSet = new Set(removedDrawIds);
+          const removedGroups = drawGroups.filter((group) => removedDrawSet.has(group.drawId));
+          const preservedGroups = drawGroups.filter((group) => !removedDrawSet.has(group.drawId));
+          const removedTicket = {
+            ...ticketToDelete,
+            drawIds: removedGroups.map((group) => group.drawId),
+            drawNames: removedGroups.map((group) => group.drawName),
+            drawEntries: removedGroups,
+            entries: getTicketFlatEntries({ ...ticketToDelete, drawEntries: removedGroups }),
+            total: Number(removedGroups.reduce((sum, group) => sum + group.subtotal, 0).toFixed(2)),
+          };
+          await releaseTicketLimits(removedTicket, get().settings);
+
+          const deleted = preservedGroups.length === 0;
+          const remainingTotal = Number(preservedGroups.reduce((sum, group) => sum + group.subtotal, 0).toFixed(2));
+          const rate = ticketToDelete.commissionRateApplied;
+          const preservedEntries = getTicketFlatEntries({ ...ticketToDelete, drawEntries: preservedGroups });
+          const drawMap = new Map(get().draws.map((draw) => [draw.id, draw]));
+          const totalPrize = preservedGroups.reduce((sum, group) => {
+            const draw = drawMap.get(group.drawId);
+            if (!draw?.results?.length) return sum;
+            return sum + group.entries.reduce((entrySum, entry) => entrySum + calculateEntryPrize(entry, draw, get().settings).prize, 0);
+          }, 0);
+          const updatedTicket: Ticket = {
+            ...ticketToDelete,
+            drawId: preservedGroups[0]?.drawId,
+            drawIds: preservedGroups.map((group) => group.drawId),
+            drawNames: preservedGroups.map((group) => group.drawName),
+            drawEntries: preservedGroups,
+            entries: preservedEntries,
+            entryTypes: Array.from(new Set(preservedEntries.map((entry) => entry.type))),
+            total: remainingTotal,
+            commission: Number((remainingTotal * rate).toFixed(2)),
+            totalPrize,
+            isWinner: totalPrize > 0,
+            hasResults: preservedGroups.some((group) => (drawMap.get(group.drawId)?.results?.length || 0) === 3),
+          };
 
           if (auth.currentUser) {
-            await deleteDoc(doc(db, 'tickets', id));
+            if (deleted) await deleteDoc(doc(db, 'tickets', id));
+            else await updateDoc(doc(db, 'tickets', id), updatedTicket as any);
           }
 
           set((state) => ({
-            tickets: state.tickets.filter((t) => t.id !== id),
+            tickets: deleted
+              ? state.tickets.filter((t) => t.id !== id)
+              : state.tickets.map((ticket) => ticket.id === id ? updatedTicket : ticket),
           }));
-          return;
+          if (!deleted) get().recalculatePrizes([id]);
+          return { deleted, removedDrawIds, preservedDrawIds: preservedGroups.map((group) => group.drawId) };
         } catch (err) {
           handleFirestoreError(err, OperationType.DELETE, `tickets/${id}`);
           throw err;

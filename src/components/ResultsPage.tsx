@@ -415,7 +415,7 @@ export const ResultsPage: React.FC = () => {
                       inputMode="numeric"
                       value={r1}
                       onChange={(e) => handleResultInput(e.target.value, setR1, r2Ref)}
-                      placeholder="--"
+                      placeholder={resultDigits === 4 ? '----' : '--'}
                       className={cn(
                         "w-12 h-12 rounded-xl text-center text-lg font-black border-2 transition-all outline-none",
                         r1 ? "bg-yellow-400 text-black border-yellow-400" : "bg-[#0B1220] text-slate-500 border-white/5 focus:border-yellow-400/50"
@@ -430,7 +430,7 @@ export const ResultsPage: React.FC = () => {
                       inputMode="numeric"
                       value={r2}
                       onChange={(e) => handleResultInput(e.target.value, setR2, r3Ref)}
-                      placeholder="--"
+                      placeholder={resultDigits === 4 ? '----' : '--'}
                       className={cn(
                         "w-12 h-12 rounded-xl text-center text-lg font-black border-2 transition-all outline-none",
                         r2 ? "bg-blue-500 text-black border-blue-500" : "bg-[#0B1220] text-slate-500 border-white/5 focus:border-blue-500/50"
@@ -445,7 +445,7 @@ export const ResultsPage: React.FC = () => {
                       inputMode="numeric"
                       value={r3}
                       onChange={(e) => handleResultInput(e.target.value, setR3)}
-                      placeholder="--"
+                      placeholder={resultDigits === 4 ? '----' : '--'}
                       className={cn(
                         "w-12 h-12 rounded-xl text-center text-lg font-black border-2 transition-all outline-none",
                         r3 ? "bg-orange-500 text-black border-orange-500" : "bg-[#0B1220] text-slate-500 border-white/5 focus:border-orange-500/50"

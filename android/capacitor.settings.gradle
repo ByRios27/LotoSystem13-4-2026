@@ -7,3 +7,9 @@ project(':capacitor-filesystem').projectDir = new File('../node_modules/@capacit
 
 include ':capacitor-share'
 project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/share/android')
+
+include ':capgo-capacitor-printer'
+project(':capgo-capacitor-printer').projectDir = new File('../node_modules/@capgo/capacitor-printer/android')
+
+include ':delicity-capacitor-thermal-printer'
+project(':delicity-capacitor-thermal-printer').projectDir = new File('../node_modules/@delicity/capacitor-thermal-printer/android')

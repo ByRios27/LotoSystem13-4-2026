@@ -1,6 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Ticket as TicketType, useStore } from '../store/useStore';
-import { Share2, X, Download, Printer, CheckCircle } from 'lucide-react';
+import { Share2, X, Download, Printer, CheckCircle, Bluetooth } from 'lucide-react';
+import { Printer as SystemPrinter } from '@capgo/capacitor-printer';
 import { TicketReceipt } from './Sales/TicketReceipt';
 import { ThermalReceipt } from './Sales/ThermalReceipt';
 import { Capacitor } from '@capacitor/core';
@@ -8,7 +9,11 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share as CapacitorShare } from '@capacitor/share';
 import { exportNodeAsPng } from '../utils/shareImage';
 import { formatAMPM, formatCurrency } from '../utils/helpers';
-import { motion } from 'motion/react';
+import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidth } from '../utils/thermalReceipt';
+import { getDefaultThermalPrinter, isNativePrinterAvailable, printThermalText } from '../services/printerService';
+import { createThermalReceiptPdf } from '../utils/thermalReceiptPdf';
+import { createThermalReceiptImages } from '../utils/thermalReceiptImage';
+import { AnimatePresence, motion } from 'motion/react';
 
 interface TicketModalProps {
   ticket: TicketType;
@@ -18,11 +23,22 @@ interface TicketModalProps {
 
 export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleConfirmation = false }) => {
   const graphicReceiptRef = useRef<HTMLDivElement>(null);
-  const thermalReceiptRef = useRef<HTMLDivElement>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showThermalPreview, setShowThermalPreview] = useState(false);
+  const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>(58);
   
   const draws = useStore((state) => state.draws);
   const fileName = `ticket-${ticket.id.substring(0, 8)}.png`;
+  const thermalFileName = `ticket-termico-${ticket.id.substring(0, 8)}`;
+
+  useEffect(() => {
+    if (!isNativePrinterAvailable()) return;
+    getDefaultThermalPrinter()
+      .then((printer) => {
+        if (printer?.capabilities.paperWidthMm === 80) setPaperWidth(80);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const ticketDrawSummary = ticket.drawIds
     .map((drawId, index) => {
@@ -33,7 +49,17 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
     })
     .join(' | ');
 
-  const shareText = `Ticket: *${ticketDrawSummary || 'Sorteo'}*\nMonto Total: *$${formatCurrency(ticket.total)}*`;
+  const shareText = `Ticket: *${ticketDrawSummary || 'Sorteo'}*\nTotal de venta: *$${formatCurrency(ticket.total)}*`;
+  const thermalShareText = `Recibo térmico: ${ticketDrawSummary || 'Sorteo'}\nTotal de venta: $${formatCurrency(ticket.total)}`;
+
+  const pdfBytesToBase64 = (bytes: Uint8Array): string => {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return btoa(binary);
+  };
 
   const handleSave = async () => {
     if (!graphicReceiptRef.current) return;
@@ -90,56 +116,80 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
     }
   };
 
-  const handlePrint = async () => {
-    if (!thermalReceiptRef.current) return;
+  const handleShareThermal = async () => {
     setIsPrinting(true);
     try {
-      const dataUrl = await exportNodeAsPng(thermalReceiptRef.current, { quality: 0.9, type: 'image/jpeg' });
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes e intenta otra vez.');
-        return;
+      const imageBlobs = await createThermalReceiptImages(ticket, draws, paperWidth);
+      if (Capacitor.isNativePlatform()) {
+        const saved = await Promise.all(imageBlobs.map(async (blob, index) => {
+          const imageData = new Uint8Array(await blob.arrayBuffer());
+          return Filesystem.writeFile({
+            path: `${thermalFileName}-${index + 1}.png`,
+            data: pdfBytesToBase64(imageData),
+            directory: Directory.Cache,
+            recursive: true,
+          });
+        }));
+        await CapacitorShare.share({
+          title: 'Recibo térmico',
+          text: thermalShareText,
+          files: saved.map((file) => file.uri),
+          dialogTitle: 'Compartir recibo',
+        });
+      } else {
+        const files = imageBlobs.map((blob, index) => new File(
+          [blob],
+          `${thermalFileName}-${index + 1}.png`,
+          { type: 'image/png' },
+        ));
+        if (navigator.share && (!navigator.canShare || navigator.canShare({ files }))) {
+          await navigator.share({ files, title: 'Recibo térmico', text: thermalShareText });
+        } else {
+          imageBlobs.forEach((blob, index) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `${thermalFileName}-${index + 1}.png`;
+            link.href = url;
+            link.click();
+            window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+          });
+        }
       }
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Imprimir Ticket</title>
-            <style>
-              body { margin: 0; padding: 16px; background: white; }
-              img { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
-              @media print { body { margin: 0; } }
-            </style>
-          </head>
-          <body>
-            <img src="${dataUrl}" />
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 250);
     } catch (err) {
-      console.error('Error de impresión:', err);
-      alert('Hubo un error al preparar la impresión.');
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.error('Error al compartir el recibo térmico:', err);
+      alert('No se pudo compartir el recibo de impresión.');
     } finally {
       setIsPrinting(false);
     }
   };
 
-  const handleBtPrint = () => {
-    const message = 'Para imprimir con impresora Bluetooth, conéctala desde los Ajustes del dispositivo y vuelve a intentarlo.';
-    alert(message);
+  const handlePrint = async () => {
+    setIsPrinting(true);
+    try {
+      const thermalText = formatThermalReceipt(ticket, draws, paperWidth);
+      const boldLines = getThermalReceiptBoldLines(ticket, draws, paperWidth);
+      const defaultPrinter = isNativePrinterAvailable() ? await getDefaultThermalPrinter() : null;
+      if (defaultPrinter) {
+        await printThermalText(thermalText, `${window.location.origin}/ticket/${ticket.id}`, paperWidth, boldLines);
+      } else {
+        const pdfBytes = await createThermalReceiptPdf(ticket, draws, paperWidth);
+        await SystemPrinter.printBase64({
+          name: `Ticket ${ticket.sequenceNumber}`,
+          data: pdfBytesToBase64(pdfBytes),
+          mimeType: 'application/pdf',
+        });
+      }
+    } catch (err: any) {
+      console.error('Error de impresión:', err);
+      alert(err?.message || 'No se pudo enviar el ticket a imprimir.');
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   return (
     <>
-      <div className="fixed top-[-9999px] left-[-9999px]">
-        <div ref={thermalReceiptRef}><ThermalReceipt ticket={ticket} /></div>
-      </div>
-
       <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-md">
         <motion.div 
             initial={{ opacity: 0, y: 50 }}
@@ -169,19 +219,18 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
 
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={handlePrint}
-                  disabled={isPrinting}
-                  className="w-full bg-white/5 text-slate-300 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  onClick={() => setShowThermalPreview(true)}
+                  className="w-full bg-white/5 text-slate-300 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/10 hover:text-white"
                 >
                   <Printer size={14} />
                   Imprimir
                 </button>
 
                 <button
-                  onClick={handleBtPrint}
+                  onClick={() => setShowThermalPreview(true)}
                   className="w-full bg-white/5 text-slate-300 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/10 hover:text-white"
                 >
-                  <Printer size={14} />
+                  <Bluetooth size={14} />
                   Print BT
                 </button>
 
@@ -190,7 +239,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
                   className="w-full bg-white/5 text-slate-300 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/10 hover:text-white col-span-2"
                 >
                   <Download size={14} />
-                  Guardar
+                  Guardar Foto
                 </button>
               </div>
 
@@ -212,6 +261,63 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
             </div>
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {showThermalPreview && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowThermalPreview(false)}
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm"
+          >
+            <motion.section
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="flex max-h-[92dvh] w-full max-w-[420px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0B1220] shadow-2xl"
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Printer size={16} className="text-brand-primary" />
+                  <div>
+                    <p className="text-[9px] font-bold text-slate-400">{paperWidth} mm · Monocromo</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setShowThermalPreview(false)} className="rounded-full bg-white/10 p-1.5 text-slate-300">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-auto bg-slate-200 p-3">
+                <ThermalReceipt ticket={ticket} paperWidth={paperWidth} />
+              </div>
+
+              <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-white/10 p-3">
+                <button
+                  type="button"
+                  onClick={handleShareThermal}
+                  disabled={isPrinting}
+                  className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white/10 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+                >
+                  <Share2 size={14} />
+                  Compartir Recibo
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={isPrinting}
+                  className="flex h-10 items-center justify-center gap-2 rounded-xl bg-brand-primary text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50"
+                >
+                  <Printer size={14} />
+                  {isPrinting ? 'Enviando…' : 'Print BT'}
+                </button>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };

@@ -1,73 +1,46 @@
-import React from 'react';
-import QRCode from 'react-qr-code';
+import React, { useEffect, useState } from 'react';
 import { Ticket as TicketType, useStore } from '../../store/useStore';
-import { formatAMPM, formatCurrency, getCustomerDisplayName } from '../../utils/helpers';
-import { normalizeTicketDrawEntries, getTicketSubtotalForDraw } from '../../utils/ticketUtils';
+import type { ThermalPaperWidth } from '../../utils/thermalReceipt';
+import { createThermalReceiptImages } from '../../utils/thermalReceiptImage';
 
 interface ThermalReceiptProps {
   ticket: TicketType;
+  paperWidth?: ThermalPaperWidth;
 }
 
-export const ThermalReceipt: React.FC<ThermalReceiptProps> = ({ ticket }) => {
+export const ThermalReceipt: React.FC<ThermalReceiptProps> = ({ ticket, paperWidth = 58 }) => {
   const draws = useStore(state => state.draws);
-  const { user } = useStore();
+  const [images, setImages] = useState<string[]>([]);
+  const [error, setError] = useState('');
 
-  const ticketUrl = `${window.location.origin}/ticket/${ticket.id}`;
-
-  const groupedEntries = normalizeTicketDrawEntries(ticket);
+  useEffect(() => {
+    let isActive = true;
+    let urls: string[] = [];
+    setImages([]);
+    setError('');
+    createThermalReceiptImages(ticket, draws, paperWidth)
+      .then((blobs) => {
+        urls = blobs.map((blob) => URL.createObjectURL(blob));
+        if (isActive) setImages(urls);
+      })
+      .catch((err: any) => {
+        if (isActive) setError(err?.message || 'No se pudo preparar la vista del recibo.');
+      });
+    return () => {
+      isActive = false;
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [ticket, draws, paperWidth]);
 
   return (
-    <div className="bg-white text-black font-mono text-[10px] p-6 w-[302px]">
-      <div className="flex items-center gap-4 mb-3">
-        <div className='w-[80px] h-[80px] flex items-center justify-center'>
-          <QRCode value={ticketUrl} size={80} level="L" />
-        </div>
-        <div className='text-[9px]'>
-            <p className="font-bold">LOTERIA</p>
-            <p>COMPROBANTE</p>
-            <p>{new Date(ticket.timestamp).toLocaleDateString('es-ES')}</p>
-            <p>{new Date(ticket.timestamp).toLocaleTimeString('es-ES', { hour12: true, hour: 'numeric', minute:'2-digit', second: '2-digit' })}</p>
-            <p>CLIENTE: {getCustomerDisplayName(ticket.customerName)}</p>
-            <p>VENDEDOR: {user?.firstName || 'N/A'}</p>
-        </div>
-      </div>
-
-      <div className="border-t border-dashed border-black"/>
-
-      <div className="my-2 space-y-2">
-        {groupedEntries.map(group => {
-            const draw = draws.find(d => d.id === group.drawId);
-            const subtotal = getTicketSubtotalForDraw(ticket, group.drawId);
-            
-            return(
-                <div key={group.drawId} className='py-1'>
-                    <div className="flex justify-between">
-                        <p className='font-bold'>{draw ? `${formatAMPM(draw.drawTime)} ${draw.name}` : 'Sorteo'}</p>
-                    </div>
-                    <div className="flex justify-between">
-                        <p>4x25</p> {/* This seems static in the example. Adjust if needed. */}
-                        <p className="font-bold">{formatCurrency(subtotal)}</p>
-                    </div>
-                    <div className="flex justify-between">
-                       <p>TX: {ticket.id.slice(0,8)}</p>
-                    </div>
-                </div>
-            )
-        })}
-      </div>
-      
-      <div className="border-t-2 border-dashed border-black pt-2">
-        <div className="flex justify-between text-lg font-bold">
-            <p>TOTAL:</p>
-            <p>{formatCurrency(ticket.total)}</p>
-        </div>
-      </div>
-
-      <div className="border-t border-dashed border-black mt-2 text-center text-[9px] pt-2">
-        <p className='font-bold'>IMPORTANTE</p>
-        <p>Sin comprobante no se pagan premios.</p>
-        <p className='font-bold mt-1'>¡GRACIAS POR SU COMPRA!</p>
-      </div>
+    <div className="flex min-w-full flex-col items-center gap-3">
+      {error ? (
+        <p className="max-w-xs rounded-xl bg-white p-3 text-xs font-bold text-rose-700">{error}</p>
+      ) : images.length === 0 ? (
+        <p className="rounded-xl bg-white p-3 text-xs font-bold text-slate-600">Preparando imagen…</p>
+      ) : images.map((src, index) => (
+        <img key={src} src={src} alt={`Recibo térmico ${index + 1}`} className="h-auto max-w-full bg-white shadow-lg" />
+      ))}
     </div>
   );
 };

@@ -9,7 +9,14 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-if ('serviceWorker' in navigator) {
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) => registrations.forEach((registration) => void registration.unregister()))
+    .catch(() => undefined);
+}
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   let hasRefreshedForNewSw = false;
   console.info('[LottoPro] build_loaded', {
     buildId: __APP_BUILD_ID__,

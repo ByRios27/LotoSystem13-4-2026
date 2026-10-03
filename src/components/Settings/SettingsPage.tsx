@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { Clock, Users, Tag, Sparkles, Bluetooth, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Clock, Users, Tag, Sparkles, Bluetooth, ShieldCheck } from 'lucide-react';
 import { cn } from '../../utils/helpers';
 import { DrawsSettingsSection } from './DrawsSettingsSection';
 import { UsersSettingsSection } from './UsersSettingsSection';
 import { SpecialPlaysSettingsSection } from './SpecialPlaysSettingsSection';
 import { ChancePricesSettings } from './ChancePricesSettings';
 import { ProfileSettingsSection } from './ProfileSettingsSection';
+import { PrinterSettingsSection } from './PrinterSettingsSection';
 import { motion, AnimatePresence } from 'motion/react';
 import { PullToRefresh } from '../PullToRefresh';
 
@@ -60,21 +61,7 @@ export const SettingsPage: React.FC = () => {
             {activeTab === 'users' && <UsersSettingsSection />}
             {activeTab === 'chances' && <ChancePricesSettings />}
             {activeTab === 'special' && <SpecialPlaysSettingsSection />}
-            {activeTab === 'devices' && (
-                <div className="space-y-3">
-                    <h4 className="text-sm font-black text-white uppercase tracking-widest px-2">Gestión de Impresoras</h4>
-                     <button 
-                      onClick={() => alert('Función en desarrollo. Próximamente podrás conectar y gestionar tus impresoras Bluetooth.')}
-                      className="w-full flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Bluetooth size={18} className="text-slate-400" />
-                        <span className="text-sm font-bold">Conectar Impresora Bluetooth</span>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-600" />
-                    </button>
-                </div>
-            )}
+            {activeTab === 'devices' && <PrinterSettingsSection />}
             {activeTab === 'profile' && <ProfileSettingsSection />}
           </motion.div>
         </AnimatePresence>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Ticket, useStore } from '../../store/useStore';
 import { calculateEntryPrize } from '../../utils/prizeCalculator';
-import { cn, formatCurrency, getDrawStatus, formatPlayNumberForDisplay, getCustomerDisplayName } from '../../utils/helpers';
+import { cn, formatAMPM, formatCurrency, getDrawStatus, formatPlayNumberForDisplay, getCustomerDisplayName } from '../../utils/helpers';
 import { PinValidationModal } from '../PinValidationModal';
 import { calculateTicketPayoutForDraw, getEntriesForDraw, getTicketSubtotalForDraw } from '../../utils/ticketUtils';
 import { 
@@ -30,6 +30,8 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
   const [currentPage, setCurrentPage] = useState(1);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [ticketToDelete, setTicketToDelete] = useState<string | null>(null);
+  const [deleteOptionsTicket, setDeleteOptionsTicket] = useState<Ticket | null>(null);
+  const [selectedDeleteDrawIds, setSelectedDeleteDrawIds] = useState<string[]>([]);
   const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [editOptionsTicket, setEditOptionsTicket] = useState<Ticket | null>(null);
@@ -115,16 +117,25 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
     beginEdit(ticket, editableDrawIds);
   };
 
-  const handleDeleteClick = (id: string) => {
-    setTicketToDelete(id);
+  const handleDeleteClick = (ticket: Ticket) => {
+    if (ticket.drawIds?.length > 1) {
+      const editableDrawIds = getEditableDrawIds(ticket);
+      if (!editableDrawIds.includes(drawId)) return;
+      setDeleteOptionsTicket(ticket);
+      setSelectedDeleteDrawIds([drawId]);
+      return;
+    }
+    setSelectedDeleteDrawIds([]);
+    setTicketToDelete(ticket.id);
     setIsPinModalOpen(true);
   };
 
   const handleConfirmDelete = async () => {
     if (ticketToDelete) {
       try {
-        const result = await deleteTicket(ticketToDelete);
+        const result = await deleteTicket(ticketToDelete, selectedDeleteDrawIds.length > 0 ? selectedDeleteDrawIds : undefined);
         setTicketToDelete(null);
+        setSelectedDeleteDrawIds([]);
         setIsPinModalOpen(false);
         setShowDeleteSuccess(true);
         setDeleteMessage(result.deleted
@@ -180,7 +191,7 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
           const hasPrize = ticket.calculatedTotalPrize > 0;
           const editableDrawIds = getEditableDrawIds(ticket);
           const canEditCurrentDraw = editableDrawIds.includes(drawId);
-          const canDeleteOpenDraws = editableDrawIds.length > 0;
+          const canDeleteCurrentDraw = editableDrawIds.includes(drawId);
           
           return (
             <div 
@@ -242,8 +253,8 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
                       <Edit2 size={13} />
                     </button>
                   )}
-                  {canDeleteOpenDraws && (
-                    <button aria-label="Eliminar ticket" onClick={() => handleDeleteClick(ticket.id)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-red-950 text-white hover:bg-red-900" : "bg-white/5 text-slate-300 hover:bg-rose-500/20 hover:text-rose-300")}>
+                  {canDeleteCurrentDraw && (
+                    <button aria-label="Eliminar ticket" onClick={() => handleDeleteClick(ticket)} className={cn("w-7 h-7 rounded-md flex items-center justify-center transition-all", hasPrize ? "bg-red-950 text-white hover:bg-red-900" : "bg-white/5 text-slate-300 hover:bg-rose-500/20 hover:text-rose-300")}>
                       <Trash2 size={13} />
                     </button>
                   )}
@@ -287,6 +298,88 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
         </div>
       )}
 
+      {deleteOptionsTicket && (() => {
+        const ticketDrawIds = deleteOptionsTicket.drawIds || (deleteOptionsTicket.drawId ? [deleteOptionsTicket.drawId] : []);
+        const editableIds = getEditableDrawIds(deleteOptionsTicket);
+        const protectedDraws = ticketDrawIds
+          .filter((id) => !editableIds.includes(id))
+          .map((id) => draws.find((draw) => draw.id === id))
+          .filter((draw): draw is NonNullable<typeof draw> => !!draw);
+
+        return (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => { setDeleteOptionsTicket(null); setSelectedDeleteDrawIds([]); }}>
+            <div className="w-full max-w-sm space-y-3 rounded-2xl border border-white/10 bg-[#121A2B] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-white">Borrar ticket múltiple</h3>
+                  <p className="mt-1 text-xs text-slate-300">Selecciona los sorteos abiertos que deseas borrar.</p>
+                </div>
+                <button type="button" onClick={() => { setDeleteOptionsTicket(null); setSelectedDeleteDrawIds([]); }} className="rounded-lg p-1 text-slate-500 hover:text-white"><X size={16} /></button>
+              </div>
+
+              <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-2.5 text-[11px] font-bold leading-relaxed text-amber-100">
+                Los sorteos cerrados o con resultados están protegidos y no se borrarán.
+              </p>
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-brand-primary/20 bg-brand-primary/5 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={editableIds.length > 0 && editableIds.every((id) => selectedDeleteDrawIds.includes(id))}
+                  onChange={(event) => setSelectedDeleteDrawIds(event.target.checked ? editableIds : [])}
+                  className="h-4 w-4 accent-emerald-500"
+                />
+                <span className="text-xs font-black uppercase tracking-widest text-white">Todos</span>
+              </label>
+
+              <div className="max-h-[42vh] space-y-1 overflow-y-auto">
+                {editableIds.map((id) => {
+                  const draw = draws.find((item) => item.id === id);
+                  if (!draw) return null;
+                  const checked = selectedDeleteDrawIds.includes(id);
+                  return (
+                    <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setSelectedDeleteDrawIds((previous) => previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id])}
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-xs font-bold text-white">{draw.name}</span>
+                      <span className="shrink-0 text-[10px] font-semibold text-slate-400">{formatAMPM(draw.drawTime)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {protectedDraws.length > 0 && (
+                <div className="space-y-1 rounded-xl border border-white/5 bg-black/20 p-2.5">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Se conservarán</p>
+                  {protectedDraws.map((draw) => (
+                    <p key={draw.id} className="truncate text-[10px] font-semibold text-slate-400">{draw.name} · {formatAMPM(draw.drawTime)}</p>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => { setDeleteOptionsTicket(null); setSelectedDeleteDrawIds([]); }} className="h-10 flex-1 rounded-xl bg-white/10 text-xs font-black uppercase tracking-wider text-white">Cancelar</button>
+                <button
+                  type="button"
+                  disabled={selectedDeleteDrawIds.length === 0}
+                  onClick={() => {
+                    setTicketToDelete(deleteOptionsTicket.id);
+                    setDeleteOptionsTicket(null);
+                    setIsPinModalOpen(true);
+                  }}
+                  className="h-10 flex-1 rounded-xl bg-rose-500 text-xs font-black uppercase tracking-wider text-white disabled:opacity-40"
+                >
+                  Continuar ({selectedDeleteDrawIds.length})
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {editOptionsTicket && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setEditOptionsTicket(null)}>
           <div className="w-full max-w-xs space-y-3 rounded-2xl border border-white/10 bg-[#121A2B] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -328,6 +421,7 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
         onClose={() => {
           setIsPinModalOpen(false);
           setTicketToDelete(null);
+          setSelectedDeleteDrawIds([]);
         }}
         onSuccess={handleConfirmDelete}
         title="Eliminar Ticket"

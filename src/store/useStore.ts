@@ -497,7 +497,7 @@ export const useStore = create<AppState>()(
 
           if (auth.currentUser) {
             if (deleted) await deleteDoc(doc(db, 'tickets', id));
-            else await updateDoc(doc(db, 'tickets', id), updatedTicket as any);
+            else await updateDoc(doc(db, 'tickets', id), stripUndefinedFields(updatedTicket));
           }
 
           set((state) => ({

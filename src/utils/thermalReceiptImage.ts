@@ -3,7 +3,8 @@ import type { Draw, Ticket } from '../store/useStore';
 import { formatAMPM, getCustomerDisplayName } from './helpers';
 import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidth } from './thermalReceipt';
 
-const MAX_IMAGE_HEIGHT = 12000;
+const MAX_OUTPUT_DIMENSION = 24000;
+const MAX_PIXEL_AREA = 24000000;
 const SIDE_MARGIN = 12;
 const FONT_SIZE = 18;
 const LINE_HEIGHT = 25;
@@ -65,17 +66,16 @@ const createSvgPage = (
   qrDataUrl: string,
   headerLines: string[],
   bodyLines: string[],
-  continuation: boolean,
   boldLines: ReadonlySet<string>,
 ): string => {
-  const qrSize = continuation ? 0 : QR_SIZE;
-  const metadataX = continuation ? SIDE_MARGIN : SIDE_MARGIN + qrSize + 12;
+  const qrSize = QR_SIZE;
+  const metadataX = SIDE_MARGIN + qrSize + 12;
   const metadataWidth = width - metadataX - SIDE_MARGIN;
   const charWidth = HEADER_FONT_SIZE * 0.6;
   const metadataColumns = Math.max(12, Math.floor(metadataWidth / charWidth));
-  const shownHeader = continuation ? ['LOTERIA - CONTINUACION'] : headerLines.flatMap((line) => wrapText(line, metadataColumns));
+  const shownHeader = headerLines.flatMap((line) => wrapText(line, metadataColumns));
   const headerHeight = Math.max(qrSize, shownHeader.length * HEADER_LINE_HEIGHT) + 12;
-  const headerSvg = continuation ? '' : `<image href="${qrDataUrl}" x="${SIDE_MARGIN}" y="${SIDE_MARGIN}" width="${QR_SIZE}" height="${QR_SIZE}" />`;
+  const headerSvg = `<image href="${qrDataUrl}" x="${SIDE_MARGIN}" y="${SIDE_MARGIN}" width="${QR_SIZE}" height="${QR_SIZE}" />`;
   const headerTextSvg = shownHeader.map((line, index) => (
     `<text x="${metadataX}" y="${SIDE_MARGIN + HEADER_FONT_SIZE + index * HEADER_LINE_HEIGHT}" font-family="monospace" font-size="${HEADER_FONT_SIZE}" font-weight="700" fill="#000">${escapeXml(line)}</text>`
   )).join('');
@@ -91,7 +91,7 @@ export async function createThermalReceiptImages(
   ticket: Ticket,
   draws: Draw[],
   paperWidth: ThermalPaperWidth,
-): Promise<Blob[]> {
+): Promise<Blob> {
   const columns = paperWidth === 58 ? 32 : 48;
   const imageWidth = columns * 12;
   const headerLines = getHeaderMetadata(ticket, draws, paperWidth);
@@ -105,46 +105,37 @@ export async function createThermalReceiptImages(
     width: 384,
   });
 
-  const renderedImages: Blob[] = [];
-  let bodyOffset = 0;
-  let pageIndex = 0;
-  while (bodyOffset < bodyLines.length || pageIndex === 0) {
-    const continuation = pageIndex > 0;
-    const shownHeader = continuation ? ['LOTERIA - CONTINUACION'] : headerLines;
-    const metadataColumns = continuation ? columns : Math.max(12, Math.floor((imageWidth - SIDE_MARGIN * 2 - QR_SIZE - 12) / (HEADER_FONT_SIZE * 0.6)));
-    const wrappedHeader = shownHeader.flatMap((line) => wrapText(line, metadataColumns));
-    const headerHeight = Math.max(continuation ? 0 : QR_SIZE, wrappedHeader.length * HEADER_LINE_HEIGHT) + 12;
-    const pageBodyCapacity = Math.max(1, Math.floor((MAX_IMAGE_HEIGHT - headerHeight - SIDE_MARGIN * 2) / LINE_HEIGHT));
-    const pageLines = bodyLines.slice(bodyOffset, bodyOffset + pageBodyCapacity);
-    const pageHeight = SIDE_MARGIN * 2 + headerHeight + FONT_SIZE + pageLines.length * LINE_HEIGHT;
-    const svg = createSvgPage(imageWidth, pageHeight, qrDataUrl, shownHeader, pageLines, continuation, boldLines);
-    const image = new Image();
-    const loaded = new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('No se pudo dibujar el recibo térmico.'));
+  const metadataColumns = Math.max(12, Math.floor((imageWidth - SIDE_MARGIN * 2 - QR_SIZE - 12) / (HEADER_FONT_SIZE * 0.6)));
+  const wrappedHeader = headerLines.flatMap((line) => wrapText(line, metadataColumns));
+  const headerHeight = Math.max(QR_SIZE, wrappedHeader.length * HEADER_LINE_HEIGHT) + 12;
+  const imageHeight = SIDE_MARGIN * 2 + headerHeight + FONT_SIZE + bodyLines.length * LINE_HEIGHT;
+  const svg = createSvgPage(imageWidth, imageHeight, qrDataUrl, headerLines, bodyLines, boldLines);
+  const image = new Image();
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('No se pudo dibujar el recibo.'));
+  });
+  image.src = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+  try {
+    await loaded;
+    const pixelRatio = Math.min(
+      3,
+      MAX_OUTPUT_DIMENSION / imageWidth,
+      MAX_OUTPUT_DIMENSION / imageHeight,
+      Math.sqrt(MAX_PIXEL_AREA / (imageWidth * imageHeight)),
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.floor(imageWidth * pixelRatio));
+    canvas.height = Math.max(1, Math.floor(imageHeight * pixelRatio));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('El dispositivo no pudo preparar la imagen del recibo.');
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => result ? resolve(result) : reject(new Error('No se pudo exportar la imagen del recibo.')), 'image/png');
     });
-    image.src = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
-    try {
-      await loaded;
-      const canvas = document.createElement('canvas');
-      canvas.width = imageWidth;
-      canvas.height = pageHeight;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('El dispositivo no pudo preparar la imagen del recibo.');
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0);
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => result ? resolve(result) : reject(new Error('No se pudo exportar la imagen del recibo.')), 'image/png');
-      });
-      renderedImages.push(blob);
-    } finally {
-      URL.revokeObjectURL(image.src);
-    }
-
-    bodyOffset += pageLines.length;
-    pageIndex += 1;
+  } finally {
+    URL.revokeObjectURL(image.src);
   }
-
-  return renderedImages;
 }

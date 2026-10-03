@@ -29,7 +29,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   
   const draws = useStore((state) => state.draws);
   const fileName = `ticket-${ticket.id.substring(0, 8)}.png`;
-  const thermalFileName = `ticket-termico-${ticket.id.substring(0, 8)}`;
+  const thermalFileName = `recibo-${ticket.id.substring(0, 8)}.png`;
 
   useEffect(() => {
     if (!isNativePrinterAvailable()) return;
@@ -49,8 +49,9 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
     })
     .join(' | ');
 
-  const shareText = `Ticket: *${ticketDrawSummary || 'Sorteo'}*\nTotal de venta: *$${formatCurrency(ticket.total)}*`;
-  const thermalShareText = `Recibo térmico: ${ticketDrawSummary || 'Sorteo'}\nTotal de venta: $${formatCurrency(ticket.total)}`;
+  const digitalShareText = ticket.drawIds.length === 1
+    ? `Ticket para ${ticketDrawSummary || ticket.drawNames?.[0] || 'Sorteo'}\nTotal de venta: $${formatCurrency(ticket.total)}`
+    : `Ticket ${ticket.id.slice(0, 8).toUpperCase()}\nTotal de venta: $${formatCurrency(ticket.total)}`;
 
   const pdfBytesToBase64 = (bytes: Uint8Array): string => {
     let binary = '';
@@ -92,7 +93,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
 
         await CapacitorShare.share({
           title: 'Ticket de Lotería',
-          text: shareText,
+          text: digitalShareText,
           url: saved.uri,
           dialogTitle: 'Compartir Ticket',
         });
@@ -101,7 +102,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
         const file = new File([blob], fileName, { type: 'image/png' });
 
         if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-          await navigator.share({ files: [file], title: 'Ticket de Lotería', text: shareText });
+          await navigator.share({ files: [file], title: 'Ticket de Lotería', text: digitalShareText });
         } else {
           const link = document.createElement('a');
           link.download = fileName;
@@ -119,40 +120,32 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   const handleShareThermal = async () => {
     setIsPrinting(true);
     try {
-      const imageBlobs = await createThermalReceiptImages(ticket, draws, paperWidth);
+      const imageBlob = await createThermalReceiptImages(ticket, draws, paperWidth);
       if (Capacitor.isNativePlatform()) {
-        const saved = await Promise.all(imageBlobs.map(async (blob, index) => {
-          const imageData = new Uint8Array(await blob.arrayBuffer());
-          return Filesystem.writeFile({
-            path: `${thermalFileName}-${index + 1}.png`,
-            data: pdfBytesToBase64(imageData),
-            directory: Directory.Cache,
-            recursive: true,
-          });
-        }));
+        const imageData = new Uint8Array(await imageBlob.arrayBuffer());
+        const saved = await Filesystem.writeFile({
+          path: thermalFileName,
+          data: pdfBytesToBase64(imageData),
+          directory: Directory.Cache,
+          recursive: true,
+        });
         await CapacitorShare.share({
-          title: 'Recibo térmico',
-          text: thermalShareText,
-          files: saved.map((file) => file.uri),
-          dialogTitle: 'Compartir recibo',
+          title: 'Ticket de Lotería',
+          text: digitalShareText,
+          url: saved.uri,
+          dialogTitle: 'Compartir ticket',
         });
       } else {
-        const files = imageBlobs.map((blob, index) => new File(
-          [blob],
-          `${thermalFileName}-${index + 1}.png`,
-          { type: 'image/png' },
-        ));
-        if (navigator.share && (!navigator.canShare || navigator.canShare({ files }))) {
-          await navigator.share({ files, title: 'Recibo térmico', text: thermalShareText });
+        const file = new File([imageBlob], thermalFileName, { type: 'image/png' });
+        if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+          await navigator.share({ files: [file], title: 'Ticket de Lotería', text: digitalShareText });
         } else {
-          imageBlobs.forEach((blob, index) => {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = `${thermalFileName}-${index + 1}.png`;
-            link.href = url;
-            link.click();
-            window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-          });
+          const url = URL.createObjectURL(imageBlob);
+          const link = document.createElement('a');
+          link.download = thermalFileName;
+          link.href = url;
+          link.click();
+          window.setTimeout(() => URL.revokeObjectURL(url), 30000);
         }
       }
     } catch (err) {

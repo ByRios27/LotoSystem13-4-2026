@@ -114,11 +114,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /archives/{archiveId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin();
-      allow update: if false;
+    match /archivesDaily/{archiveId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create, update: if isAdmin();
       allow delete: if isAdmin();
+
+      match /draws/{drawId} {
+        allow read: if isAdmin() || (isAuthenticated() && get(/databases/$(database)/documents/archivesDaily/$(archiveId)).data.userId == request.auth.uid);
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    match /archiveRecords/{recordId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /archives/{archiveId} {
+      allow read, write: if isAdmin();
     }
 
     match /betsControl/{betId} {

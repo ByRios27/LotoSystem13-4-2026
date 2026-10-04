@@ -46,8 +46,9 @@ export const SaleCustomerModal: React.FC<SaleCustomerModalProps> = ({
 
   const totalLines = previewGroups.reduce((sum, group) => sum + group.entries.length, 0);
 
-  const getEntryTypeAbbr = (type: Entry['type']): 'CH' | 'PL' | 'BL' => {
+  const getEntryTypeAbbr = (type: Entry['type']): 'CH' | 'PL' | 'BL' | 'BE' => {
     if (type === 'PALÉ') return 'PL';
+    if (type === 'BILLETE_ESPECIAL') return 'BE';
     if (type === 'BILLETE') return 'BL';
     return 'CH';
   };

@@ -9,6 +9,8 @@ interface QuickPasteModalProps {
   onClose: () => void;
   onConfirm: (entries: Entry[]) => void;
   gameMode: GameType;
+  requiredDigits: number;
+  unitPrice?: number;
   chancePrice?: ChancePrice;
   isInverted: boolean;
   setIsInverted: (val: boolean) => void;
@@ -19,6 +21,8 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
   onClose,
   onConfirm,
   gameMode,
+  requiredDigits,
+  unitPrice,
   chancePrice,
   isInverted,
   setIsInverted
@@ -34,11 +38,9 @@ export const QuickPasteModal: React.FC<QuickPasteModalProps> = ({
     const tokens = normalizedText.split(/\s+/).filter(Boolean);
     
     const newEntries: Entry[] = [];
-    const pricePerUnit = gameMode === 'BILLETE' 
+    const pricePerUnit = gameMode === 'BILLETE' || gameMode === 'BILLETE_ESPECIAL'
       ? (settings.billete?.unitPrice || 1) 
-      : (gameMode === 'PALÉ' ? 1 : (chancePrice?.value || settings.pricePerTime || 1));
-
-    const requiredDigits = gameMode === 'CHANCE' ? 2 : 4;
+      : (gameMode === 'PALÉ' ? 1 : (unitPrice ?? chancePrice?.value ?? settings.pricePerTime ?? 1));
 
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];

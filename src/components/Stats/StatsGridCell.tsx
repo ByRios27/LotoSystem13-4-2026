@@ -1,11 +1,12 @@
 import React from 'react';
 import { cn } from '../../utils/helpers';
+import { WinningPosition } from '../../store/useStore';
 
 interface GridCellProps {
   number: string;
   amount: number;
   isWinner?: boolean;
-  position?: '1er' | '2do' | '3er';
+  position?: WinningPosition;
   maxAmount: number;
   onClick: () => void;
 }

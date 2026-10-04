@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StatsGridCell } from './StatsGridCell';
 import { TicketsForNumberModal } from '../Sales/TicketsForNumberModal';
+import { getWinningPosition } from '../../utils/drawUtils';
 
 interface NumberGridProps {
   drawId: string;
@@ -36,7 +37,8 @@ export const StatsNumberGrid: React.FC<NumberGridProps> = ({
         {numbers.map((num) => {
           const amount = salesByNumber[num] || 0;
           const isWinner = results?.includes(num);
-          const position = results?.indexOf(num) === 0 ? '1er' : results?.indexOf(num) === 1 ? '2do' : results?.indexOf(num) === 2 ? '3er' : undefined;
+          const resultIndex = results?.indexOf(num) ?? -1;
+          const position = resultIndex >= 0 ? getWinningPosition(resultIndex) : undefined;
 
           return (
             <StatsGridCell

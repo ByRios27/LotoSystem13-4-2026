@@ -56,8 +56,11 @@ export async function printThermalText(
   qrUrl: string,
   paperWidth: ThermalPaperWidth,
   boldLines: ReadonlySet<string>,
+  selectedPrinterId?: string,
 ): Promise<void> {
-  const { profile } = await ThermalPrinter.getDefaultPrinter();
+  const { profile } = selectedPrinterId
+    ? { profile: { id: selectedPrinterId } as PrinterProfile }
+    : await ThermalPrinter.getDefaultPrinter();
   if (!profile) throw new Error('Selecciona una impresora desde Configuración > Dispositivos.');
 
   await ThermalPrinter.printText({

@@ -4,6 +4,7 @@ import { calculateEntryPrize } from '../../utils/prizeCalculator';
 import { cn, formatAMPM, formatCurrency, getDrawStatus, formatPlayNumberForDisplay, getCustomerDisplayName } from '../../utils/helpers';
 import { PinValidationModal } from '../PinValidationModal';
 import { calculateTicketPayoutForDraw, getEntriesForDraw, getTicketSubtotalForDraw } from '../../utils/ticketUtils';
+import { hasCompleteDrawResults } from '../../utils/drawUtils';
 import { 
   Trash2, 
   Edit2, 
@@ -59,7 +60,7 @@ export const DrawHistoryDetail: React.FC<DetailProps> = ({ drawId, tickets, onSh
 
   const hasDrawResults = useMemo(() => {
     const draw = draws.find((d) => d.id === drawId);
-    return !!(draw?.results && draw.results.length === 3);
+    return !!draw && hasCompleteDrawResults(draw);
   }, [draws, drawId]);
 
   const sortedTickets = useMemo(() => {

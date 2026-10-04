@@ -5,6 +5,7 @@ import { formatCurrency, getCustomerDisplayName, sortDrawsByTime } from '../../u
 import { motion, AnimatePresence } from 'motion/react';
 import { TicketModal } from '../TicketModal';
 import { calculateTicketPayoutForDraw, getEntriesForDraw, getTicketSubtotalForDraw, getWinningEntriesForDraw, normalizeTicketDrawEntries } from '../../utils/ticketUtils';
+import { hasCompleteDrawResults } from '../../utils/drawUtils';
 
 export const WinnersPage: React.FC = () => {
   const { tickets, draws } = useStore();
@@ -26,7 +27,7 @@ export const WinnersPage: React.FC = () => {
     filtered.forEach(ticket => {
       ticket.drawIds?.forEach((drawId, idx) => {
         const draw = draws.find(d => d.id === drawId);
-        if (!draw || !draw.results || draw.results.length !== 3) return;
+        if (!draw || !hasCompleteDrawResults(draw)) return;
 
         const settings = useStore.getState().settings;
         const drawPrize = calculateTicketPayoutForDraw(ticket, draw, settings);

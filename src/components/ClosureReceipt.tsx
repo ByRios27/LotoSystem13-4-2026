@@ -12,6 +12,7 @@ interface ClosureReceiptProps {
   totalPieces: number;
   totalSold: number;
   grid: Record<string, number>; // 00-99 sales
+  showNumberGrid?: boolean;
   combinations?: Array<{ type: string; number: string; pieces: number; amount: number }>;
 }
 
@@ -24,6 +25,7 @@ export const ClosureReceipt: React.FC<ClosureReceiptProps> = ({
   totalPieces,
   totalSold,
   grid,
+  showNumberGrid = true,
   combinations = [],
 }) => {
   const numbers = Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
@@ -67,7 +69,7 @@ export const ClosureReceipt: React.FC<ClosureReceiptProps> = ({
       </div>
 
       {/* Grid Section */}
-      <div className="mt-1">
+      {showNumberGrid && <div className="mt-1">
         <div className="text-center mb-2">
           <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em]">NUMEROS VENDIDOS</h3>
         </div>
@@ -80,7 +82,7 @@ export const ClosureReceipt: React.FC<ClosureReceiptProps> = ({
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Sold combinations section */}
       <div className="mt-1">

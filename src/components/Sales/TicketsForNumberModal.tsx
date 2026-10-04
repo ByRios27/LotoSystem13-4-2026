@@ -36,19 +36,19 @@ export const TicketsForNumberModal: React.FC<TicketsForNumberModalProps> = ({ dr
           if (entryType) {
             if (entry.type !== entryType) return false;
             if (entryType === 'PALÉ') return normalizePale(entry.number) === normalizePale(number);
-            if (entryType === 'BILLETE') return entry.number === number;
-            const chanceNumber = entry.number.length === 4 ? entry.number.slice(-2) : entry.number;
+            if (entryType === 'BILLETE' || entryType === 'BILLETE_ESPECIAL') return entry.number === number;
+            const chanceNumber = draw.drawType === 'special' ? entry.number : entry.number.length === 4 ? entry.number.slice(-2) : entry.number;
             return chanceNumber === number;
           }
 
             if (entry.type === 'CHANCE') {
-                const num = entry.number.length === 4 ? entry.number.slice(-2) : entry.number;
+                const num = draw.drawType === 'special' ? entry.number : entry.number.length === 4 ? entry.number.slice(-2) : entry.number;
                 return num === number;
             } else if (entry.type === 'PALÉ') {
                 const n1 = entry.number.substring(0, 2);
                 const n2 = entry.number.substring(2, 4);
                 return n1 === number || n2 === number;
-            } else if (entry.type === 'BILLETE') {
+            } else if (entry.type === 'BILLETE' || entry.type === 'BILLETE_ESPECIAL') {
                 return entry.number.slice(-2) === number;
             }
             return false;

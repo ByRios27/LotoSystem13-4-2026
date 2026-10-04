@@ -7,13 +7,10 @@ interface SettlementReceiptProps {
   operatorName?: string;
   date?: string;
   stats: {
-    initialFund: number;
     grossSales: number;
     prizes: number;
-    expenses: number;
     commission: number;
     netProfit: number;
-    liquidationBalance: number;
   };
 }
 
@@ -22,83 +19,38 @@ export const SettlementReceipt: React.FC<SettlementReceiptProps> = ({
   date, 
   stats 
 }) => {
-  const isLiquidationPositive = stats.liquidationBalance >= 0;
-  const netProfitPanelClass = isLiquidationPositive ? 'bg-emerald-700' : 'bg-rose-700';
+  const isPositive = stats.netProfit >= 0;
 
   return (
-    <div className="w-[600px] bg-white text-slate-900 p-10 font-sans flex flex-col gap-8">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-brand-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg">
-            L
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">LotteryHub</h1>
+    <div className="w-[600px] bg-white p-8 font-sans text-slate-900">
+      <div className="flex items-start justify-between border-b border-slate-200 pb-4">
+        <div>
+          <h1 className="text-xl font-black uppercase tracking-tight">LottoPro</h1>
+          <p className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-500">Liquidación del día</p>
         </div>
-        <div className="text-right space-y-1">
-          <p className="text-[10px] font-bold text-slate-500 uppercase">Operador: <span className="text-slate-900">{operatorName || 'N/A'}</span></p>
-          <p className="text-[10px] font-bold text-slate-500 uppercase">Tel: <span className="text-slate-900">N/A</span></p>
-          <p className="text-[10px] font-bold text-slate-500 uppercase">Fecha: <span className="text-slate-900">{date || format(new Date(), "yyyy-MM-dd")}</span></p>
+        <div className="text-right text-xs font-bold text-slate-600">
+          <p>{operatorName || 'Usuario'}</p>
+          <p className="mt-1">{date || format(new Date(), 'yyyy-MM-dd', { locale: es })}</p>
         </div>
       </div>
 
-      {/* Operations Summary */}
-      <div>
-        <h2 className="text-xl font-black text-slate-900 mb-4">Resumen de Operaciones</h2>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-slate-900 text-white">
-              <th className="text-left p-3 text-sm font-black uppercase tracking-widest">Concepto</th>
-              <th className="text-right p-3 text-sm font-black uppercase tracking-widest">Monto</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            <Row label="Fondo Inicial" value={stats.initialFund} />
-            <Row label="Ventas Totales Brutas" value={stats.grossSales} />
-            <Row label="Premios del Día (Automáticos)" value={stats.prizes} />
-            <Row label="Otros Premios / Gastos (Manuales)" value={stats.expenses} isRaw />
-            <tr className="bg-slate-50 font-black">
-              <td className="p-3 text-sm text-slate-900">Total Premios del Día</td>
-              <td className="p-3 text-sm text-right text-slate-900">${formatCurrency(stats.prizes + stats.expenses)}</td>
-            </tr>
-            <Row label="Tu Comisión" value={stats.commission} />
-            <tr className="font-black">
-              <td className="p-3 text-sm text-slate-900">Utilidad Final (Casa Grande)</td>
-              <td className="p-3 text-sm text-right text-slate-900">${formatCurrency(stats.netProfit)}</td>
-            </tr>
-            <tr className="font-black">
-              <td className="p-3 text-sm text-slate-900">Estado de Liquidacion</td>
-              <td className="p-3 text-sm text-right text-slate-900">
-                {isLiquidationPositive
-                  ? `Saldo positivo (+$${formatCurrency(stats.liquidationBalance)})`
-                  : `Perdida de $${formatCurrency(Math.abs(stats.liquidationBalance))}`}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div className="py-3">
+        <Row label="Ventas brutas" value={stats.grossSales} />
+        <Row label="Premios" value={stats.prizes} negative />
+        <Row label="Comisión" value={stats.commission} negative />
       </div>
 
-      {/* Final Settlement */}
-      <div className="mt-4">
-        <h2 className="text-xl font-black text-slate-900 mb-4">Liquidación Final</h2>
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <div className="bg-slate-50 p-3 text-center border-b border-slate-200">
-            <p className="text-sm font-black text-slate-600 uppercase tracking-widest">Utilidad Final</p>
-          </div>
-          <div className={`${netProfitPanelClass} p-6 text-center`}>
-            <p className="text-4xl font-black text-white">${formatCurrency(stats.netProfit)}</p>
-          </div>
-        </div>
+      <div className={`flex items-center justify-between rounded-lg px-4 py-4 text-white ${isPositive ? 'bg-emerald-700' : 'bg-rose-700'}`}>
+        <span className="text-xs font-black uppercase tracking-widest">Balance de liquidación</span>
+        <span className="text-2xl font-black">{isPositive ? '+' : '−'}${formatCurrency(Math.abs(stats.netProfit))}</span>
       </div>
     </div>
   );
 };
 
-const Row: React.FC<{ label: string; value: number; isRaw?: boolean }> = ({ label, value, isRaw }) => (
-  <tr>
-    <td className="p-3 text-sm text-slate-600 font-medium">{label}</td>
-    <td className="p-3 text-sm text-right text-slate-900 font-bold">
-      {isRaw ? value : `$${formatCurrency(value)}`}
-    </td>
-  </tr>
+const Row: React.FC<{ label: string; value: number; negative?: boolean }> = ({ label, value, negative }) => (
+  <div className="flex items-center justify-between border-b border-slate-100 py-3 last:border-0">
+    <span className="text-sm font-medium text-slate-600">{label}</span>
+    <span className="text-sm font-bold text-slate-900">{negative ? '−' : ''}${formatCurrency(value)}</span>
+  </div>
 );

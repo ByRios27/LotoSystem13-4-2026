@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ticket as TicketType, useStore } from '../../store/useStore';
+import { Draw, Ticket as TicketType, useStore } from '../../store/useStore';
 import { calculateEntryPrize } from '../../utils/prizeCalculator';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -7,13 +7,17 @@ import QRCode from 'react-qr-code';
 import { AlertCircle } from 'lucide-react';
 import { formatCurrency, formatPlayNumberForDisplay, getCustomerDisplayName } from '../../utils/helpers';
 import { normalizeTicketDrawEntries } from '../../utils/ticketUtils';
+import { hasCompleteDrawResults } from '../../utils/drawUtils';
 
 interface TicketReceiptProps {
   ticket: TicketType;
+  drawsOverride?: Draw[];
+  useStoredPrizes?: boolean;
 }
 
-export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
-  const draws = useStore(state => state.draws);
+export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket, drawsOverride, useStoredPrizes = false }) => {
+  const currentDraws = useStore(state => state.draws);
+  const draws = drawsOverride || currentDraws;
   const settings = useStore(state => state.settings);
   const drawGroups = normalizeTicketDrawEntries(ticket);
   const totalPrize = ticket.totalPrize || drawGroups.reduce((sum, group) => (
@@ -22,11 +26,13 @@ export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
   const hasPrize = totalPrize > 0;
 
   const calculateEntryPrizeForDraw = (entry: any, draw: any) => {
+    if (useStoredPrizes) return { prize: Number(entry.prize || 0), winningPosition: entry.winningPosition };
     return calculateEntryPrize(entry, draw, settings);
   };
 
-    const getEntryTypeAbbr = (type: string): 'CH' | 'PL' | 'BL' => {
+    const getEntryTypeAbbr = (type: string): 'CH' | 'PL' | 'BL' | 'BE' => {
     if (type === 'PALÉ') return 'PL';
+    if (type === 'BILLETE_ESPECIAL') return 'BE';
     if (type === 'BILLETE') return 'BL';
     return 'CH';
   };
@@ -81,7 +87,7 @@ export const TicketReceipt: React.FC<TicketReceiptProps> = ({ ticket }) => {
           const drawName = group.drawName || 'Sorteo';
           const drawId = group.drawId;
           const draw = draws.find(d => d.id === drawId);
-          const drawResultsAvailable = draw?.results?.length === 3;
+          const drawResultsAvailable = !!draw && hasCompleteDrawResults(draw);
           const winningEntries = drawResultsAvailable
             ? group.entries.map((entry) => ({
                 entry,

@@ -9,6 +9,7 @@ interface GlobalHeaderProps {
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
   const { getGlobalStats } = useStore();
+  const currentPage = useStore((state) => state.currentPage);
   const { totalSales, totalCommission, totalPrizes, utility } = getGlobalStats();
 
   return (
@@ -21,8 +22,10 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
         <Menu size={20} />
       </button>
 
-      {/* Center: Metrics Blocks */}
-      <div className="flex-1 flex items-center justify-between px-2">
+      {currentPage === 'settlement' ? (
+        <div className="flex-1 text-center text-[10px] font-black uppercase tracking-widest text-slate-300">Liquidación</div>
+      ) : (
+      <div className="flex flex-1 items-center justify-between px-2">
         {/* Ventas */}
         <div className="flex flex-col items-center px-1">
           <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Ventas</span>
@@ -67,6 +70,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({ onMenuClick }) => {
           </p>
         </div>
       </div>
+      )}
       
     </header>
   );

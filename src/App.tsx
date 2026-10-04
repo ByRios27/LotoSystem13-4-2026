@@ -7,6 +7,7 @@ import { ResultsPage } from './components/ResultsPage';
 import { WinnersPage } from './components/Winners/WinnersPage';
 import { ClosuresPage } from './components/ClosuresPage';
 import { SettlementPage } from './components/SettlementPage';
+import { ArchivePage } from './components/ArchivePage';
 import { Sidebar } from './components/Sidebar';
 import { GlobalHeader } from './components/GlobalHeader';
 import { Ticket, BarChart3, Settings as SettingsIcon, History as HistoryIcon, Trophy, Menu, Lock as LockIcon } from 'lucide-react';
@@ -51,6 +52,7 @@ export default function App() {
           {currentPage === 'winners' && <WinnersPage />}
           {currentPage === 'closures' && <ClosuresPage />}
           {currentPage === 'settlement' && <SettlementPage />}
+          {currentPage === 'archives' && <ArchivePage />}
         </main>
         
         {/* Bottom Navigation */}

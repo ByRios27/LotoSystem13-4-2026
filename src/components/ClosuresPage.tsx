@@ -7,6 +7,7 @@ import { ClosureReceipt } from './ClosureReceipt';
 import { calculateTicketPayoutForDraw, calculateTicketSalesForDraw, getEntriesForDraw } from '../utils/ticketUtils';
 import { exportNodeAsPng } from '../utils/shareImage';
 import { shareGeneratedImage } from '../utils/shareGeneratedImage';
+import { hasCompleteDrawResults } from '../utils/drawUtils';
 
 export const ClosuresPage: React.FC = () => {
   const { tickets, draws, currentUser, getGlobalStats } = useStore();
@@ -19,6 +20,7 @@ export const ClosuresPage: React.FC = () => {
     totalPieces: number;
     totalSold: number;
     grid: Record<string, number>;
+    showNumberGrid: boolean;
     combinations: Array<{ type: string; number: string; pieces: number; amount: number }>;
   } | null>(null);
   const [selectedDrawId, setSelectedDrawId] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export const ClosuresPage: React.FC = () => {
         const entriesForDraw = getEntriesForDraw(ticket, drawId);
         r.totalSales += calculateTicketSalesForDraw(ticket, drawId);
 
-        if (r.draw.results && r.draw.results.length === 3) {
+        if (hasCompleteDrawResults(r.draw)) {
           const { settings } = useStore.getState();
           r.totalPrizes += calculateTicketPayoutForDraw(ticket, r.draw, settings);
         }
@@ -64,7 +66,7 @@ export const ClosuresPage: React.FC = () => {
         entriesForDraw.forEach((entry) => {
           if (entry.type === 'CHANCE') r.chanceSales += entry.amount;
           else if (entry.type === 'PALÉ') r.paleSales += entry.amount;
-          else if (entry.type === 'BILLETE') r.billeteSales += entry.amount;
+          else if (entry.type === 'BILLETE' || entry.type === 'BILLETE_ESPECIAL') r.billeteSales += entry.amount;
         });
       });
     });
@@ -94,17 +96,17 @@ export const ClosuresPage: React.FC = () => {
     ticketsToProcess.forEach((t: Ticket) => {
       const drawIdsToUse = isGlobal ? t.drawIds : [item.draw.id];
       drawIdsToUse.forEach((drawId: string) => {
+        const draw = draws.find((item) => item.id === drawId);
         getEntriesForDraw(t, drawId).forEach((e) => {
           if (e.type === 'CHANCE') {
-            const num = e.number.slice(-2);
-            const entryPieces = e.pieces ?? (e.amount / pricePerTime);
-            grid[num] = (grid[num] || 0) + entryPieces;
+            const entryPieces = e.pieces ?? (e.amount / (draw?.drawType === 'special' ? draw.chancePricePerPiece ?? 1 : pricePerTime));
             pieces += entryPieces;
+            grid[e.number] = (grid[e.number] || 0) + entryPieces;
             return;
           }
 
           const displayNumber =
-            e.type !== 'BILLETE' && e.number.length === 4
+            e.type === 'PALÉ' && e.number.length === 4
               ? `${e.number.slice(0, 2)}-${e.number.slice(2, 4)}`
               : e.number;
           const key = `${e.type}:${displayNumber}`;
@@ -132,6 +134,7 @@ export const ClosuresPage: React.FC = () => {
       totalPieces: pieces,
       totalSold: Number((isGlobal ? globalStats.totalSales : item.totalSales).toFixed(2)),
       grid,
+      showNumberGrid: true,
       combinations,
     };
 
@@ -182,6 +185,7 @@ export const ClosuresPage: React.FC = () => {
               totalPieces={exportData.totalPieces}
               totalSold={exportData.totalSold}
               grid={exportData.grid}
+              showNumberGrid={exportData.showNumberGrid}
               combinations={exportData.combinations}
               title="CIERRE DE SORTEO"
             />

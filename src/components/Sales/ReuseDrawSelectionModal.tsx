@@ -36,7 +36,10 @@ export const ReuseDrawSelectionModal: React.FC<ReuseDrawSelectionModalProps> = (
   if (!isOpen) return null;
 
   const toggleDraw = (id: string) => {
+    const clickedDraw = activeDraws.find((draw) => draw.id === id);
     setSelectedIds(prev => {
+      if (clickedDraw?.drawType === 'special') return [id];
+      if (prev.some((selectedId) => activeDraws.find((draw) => draw.id === selectedId)?.drawType === 'special')) return [id];
       if (prev.includes(id)) {
         if (prev.length === 1) return prev;
         return prev.filter(i => i !== id);

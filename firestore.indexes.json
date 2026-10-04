@@ -33,7 +33,37 @@
         { "fieldPath": "entryTypes", "arrayConfig": "CONTAINS" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "archivesDaily",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "businessDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "archiveRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "businessDate", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "archivesDaily",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "archiveRecords",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    }
+  ]
 }

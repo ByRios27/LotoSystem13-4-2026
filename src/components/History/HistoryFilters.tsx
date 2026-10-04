@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '../../utils/helpers';
 
-export type FilterType = 'TODO' | 'CHANCE' | 'BILLETE' | 'PALÉ';
+export type FilterType = 'TODO' | 'CHANCE' | 'BILLETE' | 'BILLETE_ESPECIAL' | 'PALÉ';
 
 interface FiltersProps {
   activeFilter: FilterType;
@@ -9,7 +9,7 @@ interface FiltersProps {
 }
 
 export const HistoryFilters: React.FC<FiltersProps> = ({ activeFilter, onFilterChange }) => {
-  const filters: FilterType[] = ['TODO', 'CHANCE', 'BILLETE', 'PALÉ'];
+  const filters: FilterType[] = ['TODO', 'CHANCE', 'BILLETE', 'BILLETE_ESPECIAL', 'PALÉ'];
 
   return (
     <div className="flex gap-1.5 mb-3 px-1 overflow-x-auto no-scrollbar">
@@ -24,7 +24,7 @@ export const HistoryFilters: React.FC<FiltersProps> = ({ activeFilter, onFilterC
               : "bg-[#121A2B] text-slate-500"
           )}
         >
-          {filter}
+          {filter === 'BILLETE_ESPECIAL' ? 'BILLETE EXTRA' : filter}
         </button>
       ))}
     </div>

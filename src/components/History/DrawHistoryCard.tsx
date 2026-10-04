@@ -2,8 +2,9 @@ import React from 'react';
 import { ChevronDown, Lock } from 'lucide-react';
 import { cn, formatAMPM, formatCurrency, getDrawStatus } from '../../utils/helpers';
 import { DrawHistoryDetail } from './DrawHistoryDetail';
-import { Ticket } from '../../store/useStore';
+import { Draw, Ticket } from '../../store/useStore';
 import { motion, AnimatePresence } from 'motion/react';
+import { hasCompleteDrawResults } from '../../utils/drawUtils';
 
 interface CardProps {
   draw: {
@@ -12,6 +13,8 @@ interface CardProps {
     drawTime: string;
     closeTimeSort?: number;
     digitsMode: number;
+    drawType?: Draw['drawType'];
+    prizeCount?: number;
     status: 'open' | 'closed';
     totalSold: number;
     totalPrizes: number;
@@ -24,7 +27,7 @@ interface CardProps {
 }
 
 export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggle, onShare }) => {
-  const hasResults = !!draw.results && draw.results.length === 3;
+  const hasResults = hasCompleteDrawResults(draw);
   const prizesExceedSales = hasResults && draw.totalPrizes > draw.totalSold;
 
   return (
@@ -72,14 +75,15 @@ export const DrawHistoryCard: React.FC<CardProps> = ({ draw, isExpanded, onToggl
                 {formatAMPM(draw.drawTime)}
               </p>
             </div>
-            <div className="flex min-w-0 items-center gap-2 mt-1 min-h-[13.5px] overflow-hidden whitespace-nowrap">
+            <div className="flex min-w-0 max-w-full items-center gap-2 mt-1 min-h-[13.5px] overflow-x-auto whitespace-nowrap">
               {draw.results && draw.results.length > 0 && (
                 <div className="flex shrink-0 gap-1">
                   {draw.results.map((res, idx) => (
                     <span
                       key={idx}
                       className={cn(
-                        'min-w-6 px-1 py-0.5 rounded flex items-center justify-center text-[8px] font-black border',
+                        'min-w-6 shrink-0 px-1 py-0.5 rounded flex items-center justify-center text-[8px] font-black border',
+                        res.length > 6 && 'min-w-[58px] text-[7px]',
                         'bg-white text-slate-900 border-white'
                       )}
                     >

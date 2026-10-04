@@ -9,21 +9,33 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreErrorHandle
 import { generateSellerId, getDrawStatus } from '../utils/helpers';
 import type { DrawEntryGroup } from '../utils/ticketUtils';
 import { getTicketFlatEntries, normalizeTicketDrawEntries } from '../utils/ticketUtils';
+import { hasCompleteDrawResults } from '../utils/drawUtils';
 
 // ... (interfaces remain the same)
 export type DrawStatus = 'open' | 'closed' | 'inactive';
 
 export interface Draw {
   id: string;
+  drawType?: 'normal' | 'special';
   name: string;
   drawTime: string;
   drawTimeSort?: number;
   closeTime: string;
   closeTimeSort?: number;
-  digitsMode: 2 | 4;
+  digitsMode: number;
+  prizeCount?: number;
+  chancePricePerPiece?: number;
+  specialChancePayouts?: number[];
+  chanceMatchPosition?: 'first' | 'last';
+  billeteMatchPosition?: 'first' | 'last';
+  specialPrizeRules?: SpecialPrizeRule[];
+  specialPalePairs?: SpecialPalePairRule[];
+  specialBilleteDigits?: number;
   allowedSpecialBets: {
+    chance?: boolean;
     pale: boolean;
     billete: boolean;
+    billeteExtra?: boolean;
   };
   isActive: boolean;
   results?: string[];
@@ -34,8 +46,27 @@ export interface Draw {
   updatedBy: string;
 }
 
-export type GameType = 'CHANCE' | 'PALÉ' | 'BILLETE';
-export type WinningPosition = '1er' | '2do' | '3er' | '1er + 2do' | '1er + 3er' | '2do + 3er';
+export interface SpecialPrizeRule {
+  resultDigits: number;
+  chanceEnabled: boolean;
+  chanceSegment: 'first' | 'last';
+  chancePayoutPerPiece: number;
+  billeteEnabled: boolean;
+  billeteSegment: 'first' | 'last';
+  billeteExtraEnabled: boolean;
+  billeteExtraSegment: 'first' | 'last';
+  billeteExtraPayouts: number[];
+}
+
+export interface SpecialPalePairRule {
+  firstPrizeIndex: number;
+  secondPrizeIndex: number;
+  enabled: boolean;
+  multiplier: number;
+}
+
+export type GameType = 'CHANCE' | 'PALÉ' | 'BILLETE' | 'BILLETE_ESPECIAL';
+export type WinningPosition = '1er' | '2do' | '3er' | '4to' | '5to' | '6to' | '7mo' | '8vo' | '9no' | '10mo' | '1er + 2do' | '1er + 3er' | '2do + 3er' | `${string} + ${string}`;
 
 export interface Entry {
   id?: string;
@@ -144,7 +175,7 @@ export interface SpecialPlay {
   type: string;
 }
 
-export type Page = 'sales' | 'history' | 'stats' | 'settings' | 'results' | 'winners' | 'closures' | 'settlement' | 'userSettings';
+export type Page = 'sales' | 'history' | 'stats' | 'settings' | 'results' | 'winners' | 'closures' | 'settlement' | 'archives' | 'userSettings';
 
 interface AppState {
   draws: Draw[];
@@ -405,7 +436,7 @@ export const useStore = create<AppState>()(
         const rate = typeof existingTicket.commissionRateApplied === 'number'
           ? existingTicket.commissionRateApplied
           : (get().currentUser?.commission ?? get().settings.commissionRate);
-        const drawMap = new Map(get().draws.map((draw) => [draw.id, draw]));
+        const drawMap = new Map<string, Draw>(get().draws.map((draw) => [draw.id, draw] as const));
         const totalPrize = normalizedDrawEntries.reduce((sum, group) => {
           const draw = drawMap.get(group.drawId);
           if (!draw?.results?.length) return sum;
@@ -421,7 +452,10 @@ export const useStore = create<AppState>()(
           entries: flatEntries,
           total,
           totalPrize,
-          hasResults: normalizedDrawEntries.some((group) => (drawMap.get(group.drawId)?.results?.length || 0) === 3),
+          hasResults: normalizedDrawEntries.some((group) => {
+            const draw = drawMap.get(group.drawId);
+            return !!draw && hasCompleteDrawResults(draw);
+          }),
           isWinner: totalPrize > 0,
           commissionRateApplied: rate,
           commission: Number((total * rate).toFixed(2)),
@@ -474,7 +508,7 @@ export const useStore = create<AppState>()(
           const remainingTotal = Number(preservedGroups.reduce((sum, group) => sum + group.subtotal, 0).toFixed(2));
           const rate = ticketToDelete.commissionRateApplied;
           const preservedEntries = getTicketFlatEntries({ ...ticketToDelete, drawEntries: preservedGroups });
-          const drawMap = new Map(get().draws.map((draw) => [draw.id, draw]));
+          const drawMap = new Map<string, Draw>(get().draws.map((draw) => [draw.id, draw] as const));
           const totalPrize = preservedGroups.reduce((sum, group) => {
             const draw = drawMap.get(group.drawId);
             if (!draw?.results?.length) return sum;
@@ -492,7 +526,10 @@ export const useStore = create<AppState>()(
             commission: Number((remainingTotal * rate).toFixed(2)),
             totalPrize,
             isWinner: totalPrize > 0,
-            hasResults: preservedGroups.some((group) => (drawMap.get(group.drawId)?.results?.length || 0) === 3),
+            hasResults: preservedGroups.some((group) => {
+              const draw = drawMap.get(group.drawId);
+              return !!draw && hasCompleteDrawResults(draw);
+            }),
           };
 
           if (auth.currentUser) {
@@ -604,6 +641,14 @@ export const useStore = create<AppState>()(
           return { draws: updatedDraws };
         });
         get().recalculatePrizes();
+        const affectedTickets = get().tickets.filter((ticket) => ticket.drawIds?.includes(drawId));
+        for (let index = 0; index < affectedTickets.length; index += 450) {
+          const batch = writeBatch(db);
+          affectedTickets.slice(index, index + 450).forEach((ticket) => {
+            batch.update(doc(db, 'tickets', ticket.id), stripUndefinedFields(ticket));
+          });
+          await batch.commit();
+        }
       },
 
       removeResults: async (drawId) => {
@@ -633,13 +678,21 @@ export const useStore = create<AppState>()(
           return { draws: updatedDraws };
         });
         get().recalculatePrizes();
+        const affectedTickets = get().tickets.filter((ticket) => ticket.drawIds?.includes(drawId));
+        for (let index = 0; index < affectedTickets.length; index += 450) {
+          const batch = writeBatch(db);
+          affectedTickets.slice(index, index + 450).forEach((ticket) => {
+            batch.update(doc(db, 'tickets', ticket.id), stripUndefinedFields(ticket));
+          });
+          await batch.commit();
+        }
       },
 
       recalculatePrizes: (ticketIds) => {
         set((state) => {
           const shouldRecalculateAll = !ticketIds || ticketIds.length === 0;
           const targetTicketIds = shouldRecalculateAll ? null : new Set(ticketIds);
-          const drawMap = new Map(state.draws.map((draw) => [draw.id, draw]));
+          const drawMap = new Map<string, Draw>(state.draws.map((draw) => [draw.id, draw] as const));
 
           const updatedTickets = state.tickets.map(ticket => {
             if (!shouldRecalculateAll && !targetTicketIds?.has(ticket.id)) {
@@ -654,7 +707,7 @@ export const useStore = create<AppState>()(
                 let winningPosition: Entry['winningPosition'];
                 let status: 'pending' | 'winner' | 'loser' = 'pending';
 
-                if (draw && draw.results && draw.results.length === 3) {
+                if (draw && hasCompleteDrawResults(draw)) {
                   const { prize: currentDrawPrize, winningPosition: currentWinningPosition } = calculateEntryPrize(entry, draw, state.settings);
 
                   if (currentDrawPrize > 0) {
@@ -681,7 +734,7 @@ export const useStore = create<AppState>()(
               drawId: ticket.drawIds?.[0],
               hasResults: updatedDrawEntries.some((group) => {
                 const draw = drawMap.get(group.drawId);
-                return !!(draw?.results && draw.results.length === 3);
+                return !!draw && hasCompleteDrawResults(draw);
               }),
               isWinner: totalPrize > 0,
               drawEntries: updatedDrawEntries,
@@ -698,17 +751,25 @@ export const useStore = create<AppState>()(
         if (!auth.currentUser) return;
         
         try {
-          const { tickets, draws } = get();
+          const { draws } = get();
+          const ticketSnapshot = await getDocs(collection(db, 'tickets'));
+          const ticketDocs = ticketSnapshot.docs;
+          const batchSize = 450;
+          const deleteTicketPromises: Promise<void>[] = [];
           
-          // 1. Delete all tickets from Firestore
-          const ticketPromises = tickets.map(t => deleteDoc(doc(db, 'tickets', t.id)));
+          // Delete every sale document, including tickets from previous dates.
+          for (let i = 0; i < ticketDocs.length; i += batchSize) {
+            const chunk = ticketDocs.slice(i, i + batchSize);
+            const batch = writeBatch(db);
+            chunk.forEach((ticketDoc) => batch.delete(ticketDoc.ref));
+            deleteTicketPromises.push(batch.commit());
+          }
           
           // 2. Clear results from all draws in Firestore
-          const drawPromises = draws.map(d => updateDoc(doc(db, 'draws', d.id), { results: deleteField() }));
+          const drawPromises = draws.map(d => updateDoc(doc(db, 'draws', d.id), { results: deleteField(), resultsEnteredAt: deleteField() }));
 
           // 3. Clear any historical control docs (limits removed, but collection may still have legacy entries)
           const betsControlSnapshot = await getDocs(collection(db, 'betsControl'));
-          const batchSize = 450;
           const betControlDocs = betsControlSnapshot.docs;
           const deleteBetControlPromises: Promise<void>[] = [];
 
@@ -718,18 +779,40 @@ export const useStore = create<AppState>()(
             chunk.forEach((docSnap) => batch.delete(docSnap.ref));
             deleteBetControlPromises.push(batch.commit());
           }
+
+          const [dailyArchiveSnapshot, archiveRecordSnapshot, legacyArchiveSnapshot] = await Promise.all([
+            getDocs(collection(db, 'archivesDaily')),
+            getDocs(collection(db, 'archiveRecords')),
+            getDocs(collection(db, 'archives')),
+          ]);
+          const legacyDrawSnapshots = await Promise.all(
+            dailyArchiveSnapshot.docs.map((archiveDoc) => getDocs(collection(db, 'archivesDaily', archiveDoc.id, 'draws')))
+          );
+          const archiveRefs = [
+            ...dailyArchiveSnapshot.docs.map((archiveDoc) => archiveDoc.ref),
+            ...archiveRecordSnapshot.docs.map((archiveDoc) => archiveDoc.ref),
+            ...legacyArchiveSnapshot.docs.map((archiveDoc) => archiveDoc.ref),
+            ...legacyDrawSnapshots.flatMap((snapshot) => snapshot.docs.map((drawDoc) => drawDoc.ref)),
+          ];
+          const deleteArchivePromises: Promise<void>[] = [];
+          for (let i = 0; i < archiveRefs.length; i += batchSize) {
+            const batch = writeBatch(db);
+            archiveRefs.slice(i, i + batchSize).forEach((archiveRef) => batch.delete(archiveRef));
+            deleteArchivePromises.push(batch.commit());
+          }
           
           await Promise.all([
-            ...ticketPromises,
+            ...deleteTicketPromises,
             ...drawPromises,
             ...deleteBetControlPromises,
+            ...deleteArchivePromises,
           ]);
           
           // 4. Update local state
           set({
             tickets: [],
             draws: draws.map(d => {
-              const { results, ...rest } = d;
+              const { results, resultsEnteredAt, ...rest } = d;
               return rest;
             }),
           });

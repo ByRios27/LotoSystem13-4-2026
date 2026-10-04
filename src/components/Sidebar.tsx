@@ -8,7 +8,8 @@ import {
   LogOut, 
   X,
   ChevronRight,
-  Ticket
+  Ticket,
+  Archive as ArchiveIcon
 } from 'lucide-react';
 import { useStore, Page } from '../store/useStore';
 import { cn } from '../utils/helpers';
@@ -26,6 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const menuItems = [
     { id: 'winners', label: 'Ganadores', icon: Trophy },
     { id: 'closures', label: 'Cierres', icon: LockIcon },
+    { id: 'archives', label: 'Archivos', icon: ArchiveIcon },
     { id: 'settlement', label: 'Liquidación', icon: Wallet },
     { id: 'settings', label: 'Configuración', icon: UserCog },
   ];

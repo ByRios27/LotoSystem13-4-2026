@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useStore, Ticket } from '../../store/useStore';
+import { useStore, Ticket, Draw } from '../../store/useStore';
 import { HistoryFilters, FilterType } from './HistoryFilters';
 import { DrawHistoryCard } from './DrawHistoryCard';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,6 +14,7 @@ import {
   getTicketSubtotalForDraw,
   normalizeTicketDrawEntries,
 } from '../../utils/ticketUtils';
+import { hasCompleteDrawResults } from '../../utils/drawUtils';
 
 interface ShareOptionsProps {
   ticket: Ticket;
@@ -29,6 +30,8 @@ interface DrawHistoryItem {
   resultsEnteredAt?: number;
   updatedAt?: number;
   digitsMode: number;
+  drawType?: Draw['drawType'];
+  prizeCount?: number;
   status: 'open' | 'closed';
   totalSold: number;
   totalPrizes: number;
@@ -184,7 +187,7 @@ export const HistoryPage: React.FC = () => {
         const totalSold = filteredTickets.reduce((sum, ticket) => sum + calculateTicketSalesForDraw(ticket, draw.id), 0);
 
         let totalPrizes = 0;
-        if (draw.results && draw.results.length === 3) {
+        if (hasCompleteDrawResults(draw)) {
           filteredTickets.forEach((ticket) => {
             totalPrizes += calculateTicketPayoutForDraw(ticket, draw, settings);
           });

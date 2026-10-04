@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Ticket as TicketType, useStore } from '../store/useStore';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Draw, Ticket as TicketType, useStore } from '../store/useStore';
 import { Share2, X, Download, Printer, CheckCircle, Bluetooth } from 'lucide-react';
-import { Printer as SystemPrinter } from '@capgo/capacitor-printer';
 import { TicketReceipt } from './Sales/TicketReceipt';
 import { ThermalReceipt } from './Sales/ThermalReceipt';
 import { Capacitor } from '@capacitor/core';
@@ -11,7 +10,6 @@ import { exportNodeAsAdaptivePng, exportNodeAsPng } from '../utils/shareImage';
 import { formatAMPM, formatCurrency } from '../utils/helpers';
 import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidth } from '../utils/thermalReceipt';
 import { getDefaultThermalPrinter, isNativePrinterAvailable, printThermalText } from '../services/printerService';
-import { createThermalReceiptPdf } from '../utils/thermalReceiptPdf';
 import { createThermalReceiptImages } from '../utils/thermalReceiptImage';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -19,15 +17,28 @@ interface TicketModalProps {
   ticket: TicketType;
   onClose: () => void;
   saleConfirmation?: boolean;
+  drawSnapshots?: Draw[];
+  useStoredPrizes?: boolean;
 }
 
-export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleConfirmation = false }) => {
+export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleConfirmation = false, drawSnapshots, useStoredPrizes = false }) => {
   const graphicReceiptRef = useRef<HTMLDivElement>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [showThermalPreview, setShowThermalPreview] = useState(false);
+  const [printNotice, setPrintNotice] = useState<string | null>(null);
+  const printNoticeTimeoutRef = useRef<number | null>(null);
   const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>(58);
   
-  const draws = useStore((state) => state.draws);
+  const currentDraws = useStore((state) => state.draws);
+  const draws = useMemo(() => {
+    if (!drawSnapshots || drawSnapshots.length === 0) return currentDraws;
+    const snapshotById = new Map(drawSnapshots.map((draw) => [draw.id, draw]));
+    const merged = currentDraws.map((draw) => snapshotById.get(draw.id) || draw);
+    drawSnapshots.forEach((draw) => {
+      if (!merged.some((current) => current.id === draw.id)) merged.push(draw);
+    });
+    return merged;
+  }, [currentDraws, drawSnapshots]);
   const fileName = `ticket-${ticket.id.substring(0, 8)}.png`;
   const thermalFileName = `recibo-${ticket.id.substring(0, 8)}.png`;
 
@@ -39,6 +50,19 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => () => {
+    if (printNoticeTimeoutRef.current !== null) window.clearTimeout(printNoticeTimeoutRef.current);
+  }, []);
+
+  const notifyPrint = (message: string) => {
+    if (printNoticeTimeoutRef.current !== null) window.clearTimeout(printNoticeTimeoutRef.current);
+    setPrintNotice(message);
+    printNoticeTimeoutRef.current = window.setTimeout(() => {
+      setPrintNotice(null);
+      printNoticeTimeoutRef.current = null;
+    }, 2200);
+  };
 
   const ticketDrawSummary = ticket.drawIds
     .map((drawId, index) => {
@@ -165,22 +189,23 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   const handlePrint = async () => {
     setIsPrinting(true);
     try {
+      if (!isNativePrinterAvailable()) {
+        notifyPrint('No hay dispositivo conectado');
+        return;
+      }
+      const defaultPrinter = await getDefaultThermalPrinter();
+      if (!defaultPrinter) {
+        notifyPrint('No hay dispositivo conectado');
+        return;
+      }
       const thermalText = formatThermalReceipt(ticket, draws, paperWidth);
       const boldLines = getThermalReceiptBoldLines(ticket, draws, paperWidth);
-      const defaultPrinter = isNativePrinterAvailable() ? await getDefaultThermalPrinter() : null;
-      if (defaultPrinter) {
-        await printThermalText(thermalText, `${window.location.origin}/ticket/${ticket.id}`, paperWidth, boldLines);
-      } else {
-        const pdfBytes = await createThermalReceiptPdf(ticket, draws, paperWidth);
-        await SystemPrinter.printBase64({
-          name: `Ticket ${ticket.sequenceNumber}`,
-          data: pdfBytesToBase64(pdfBytes),
-          mimeType: 'application/pdf',
-        });
-      }
+      await printThermalText(thermalText, `${window.location.origin}/ticket/${ticket.id}`, paperWidth, boldLines, defaultPrinter.id);
     } catch (err: any) {
       console.error('Error de impresión:', err);
-      alert(err?.message || 'No se pudo enviar el ticket a imprimir.');
+      const errorText = String(err?.code || err?.message || '');
+      const noPrinter = /PRINTER_NOT_FOUND|PRINTER_OFFLINE|CONNECTION_FAILED|BLUETOOTH_DISABLED|not connected|not found/i.test(errorText);
+      notifyPrint(noPrinter ? 'No hay dispositivo conectado' : 'No se pudo enviar a imprimir');
     } finally {
       setIsPrinting(false);
     }
@@ -203,7 +228,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
             )}
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
-              <div ref={graphicReceiptRef}><TicketReceipt ticket={ticket} /></div>
+              <div ref={graphicReceiptRef}><TicketReceipt ticket={ticket} drawsOverride={draws} useStoredPrizes={useStoredPrizes} /></div>
             </div>
             
             <div className="shrink-0 p-3 flex flex-col gap-2 border-t border-white/5">
@@ -225,11 +250,12 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
                 </button>
 
                 <button
-                  onClick={() => setShowThermalPreview(true)}
+                  onClick={handlePrint}
+                  disabled={isPrinting}
                   className="w-full bg-white/5 text-slate-300 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/10 hover:text-white"
                 >
                   <Bluetooth size={14} />
-                  Print BT
+                  {isPrinting ? 'Enviando…' : 'Print BT'}
                 </button>
 
                 <button
@@ -313,6 +339,20 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
                 </button>
               </div>
             </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {printNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            role="status"
+            className="fixed bottom-24 left-1/2 z-[300] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-[11px] font-bold text-white shadow-xl"
+          >
+            <Bluetooth size={14} className="text-slate-300" />
+            {printNotice}
           </motion.div>
         )}
       </AnimatePresence>

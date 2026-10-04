@@ -21,6 +21,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { PullToRefresh } from './PullToRefresh';
 import { calculateTicketPayoutForDraw, calculateTicketSalesForDraw, getEntriesForDraw } from '../utils/ticketUtils';
+import { getDrawPrizeCount, getDrawPrizeDigits, getPrizePositionLabel, getResultDigitsForPlay, getWinningPosition, hasCompleteDrawResults } from '../utils/drawUtils';
 
 export const ResultsPage: React.FC = () => {
   const { draws, setResults, removeResults, tickets, currentUser, settings } = useStore();
@@ -30,16 +31,15 @@ export const ResultsPage: React.FC = () => {
   const [isResultEditorOpen, setIsResultEditorOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   
-  const [r1, setR1] = useState('');
-  const [r2, setR2] = useState('');
-  const [r3, setR3] = useState('');
+  const [resultValues, setResultValues] = useState<string[]>(['', '', '']);
+  const resultInputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
   
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('Resultados guardados');
 
   const filteredDraws = useMemo(() => {
     const visibleDraws = draws.filter(draw => {
-      const hasResults = draw.results && draw.results.length > 0;
+      const hasResults = hasCompleteDrawResults(draw);
       const hasSales = tickets.some(t => t.drawIds?.includes(draw.id));
       return hasResults || hasSales;
     });
@@ -49,41 +49,35 @@ export const ResultsPage: React.FC = () => {
   const drawFinancials = useMemo(() => new Map(draws.map((draw) => {
     const drawTickets = tickets.filter((ticket) => ticket.drawIds?.includes(draw.id));
     const totalSales = drawTickets.reduce((sum, ticket) => sum + calculateTicketSalesForDraw(ticket, draw.id), 0);
-    const totalPrizes = draw.results?.length === 3
+    const totalPrizes = hasCompleteDrawResults(draw)
       ? drawTickets.reduce((sum, ticket) => sum + calculateTicketPayoutForDraw(ticket, draw, settings), 0)
       : 0;
     return [draw.id, { totalSales, totalPrizes }];
   })), [draws, tickets, settings]);
 
   const drawsPendingResults = useMemo(
-    () => sortDrawsChronologically(draws.filter((draw) => draw.isActive && !(draw.results && draw.results.length > 0))),
+    () => sortDrawsChronologically(draws.filter((draw) => draw.isActive && !hasCompleteDrawResults(draw))),
     [draws]
   );
 
   const selectedDraw = useMemo(() => draws.find(d => d.id === selectedDrawId), [draws, selectedDrawId]);
-  const resultDigits = selectedDraw?.digitsMode || 2;
+  const resultCount = selectedDraw ? getDrawPrizeCount(selectedDraw) : 3;
 
   const isCEO = currentUser?.role === 'CEO';
 
   // Load existing results when draw is selected
   React.useEffect(() => {
-    if (selectedDraw && selectedDraw.results) {
-      setR1(selectedDraw.results[0] || '');
-      setR2(selectedDraw.results[1] || '');
-      setR3(selectedDraw.results[2] || '');
-    } else {
-      setR1('');
-      setR2('');
-      setR3('');
-    }
-  }, [selectedDraw]);
+    setResultValues(Array.from({ length: resultCount }, (_, index) => selectedDraw?.results?.[index] || ''));
+    resultInputRefs.current = [];
+  }, [selectedDraw, resultCount]);
 
   const handleSave = async () => {
     if (!isCEO || !selectedDrawId) return;
-    if (r1.length !== resultDigits || r2.length !== resultDigits || r3.length !== resultDigits) return;
+    const results = resultValues.slice(0, resultCount);
+    if (results.length !== resultCount || results.some((result, index) => result.length !== (selectedDraw ? getDrawPrizeDigits(selectedDraw, index) : 2))) return;
 
     try {
-      await setResults(selectedDrawId, [r1, r2, r3]);
+      await setResults(selectedDrawId, results);
       setSuccessMessage('Resultados guardados');
       setShowSuccess(true);
       setSelectedDrawId(null);
@@ -99,9 +93,7 @@ export const ResultsPage: React.FC = () => {
     if (!isCEO || !selectedDrawId) return;
     try {
       await removeResults(selectedDrawId);
-      setR1('');
-      setR2('');
-      setR3('');
+      setResultValues(Array.from({ length: resultCount }, () => ''));
       setSelectedDrawId(null);
       setIsResultEditorOpen(false);
       setIsPinModalOpen(false);
@@ -119,7 +111,7 @@ export const ResultsPage: React.FC = () => {
     amount: number;
     count: number;
     prize?: number;
-    type?: '1ro' | '2do' | '3ro';
+    type?: string;
   }
 
   const gridData = useMemo(() => {
@@ -145,7 +137,7 @@ export const ResultsPage: React.FC = () => {
             data[num].amount += amountForDraw;
             data[num].count += pieces;
             
-            if (selectedDraw?.results && selectedDraw.results.length === 3) {
+            if (selectedDraw && hasCompleteDrawResults(selectedDraw)) {
               const { prize: entryPrize } = calculateEntryPrize(entry, selectedDraw, useStore.getState().settings);
               if (entryPrize > 0) {
                 data[num].prize = (data[num].prize || 0) + entryPrize;
@@ -174,15 +166,11 @@ export const ResultsPage: React.FC = () => {
     });
 
     // Mark winners if results exist
-    if (selectedDraw?.results && selectedDraw.results.length === 3) {
-      const [win1, win2, win3] = selectedDraw.results;
-      const w1 = win1.slice(-2);
-      const w2 = win2.slice(-2);
-      const w3 = win3.slice(-2);
-
-      if (data[w1]) data[w1].type = '1ro';
-      if (data[w2]) data[w2].type = '2do';
-      if (data[w3]) data[w3].type = '3ro';
+    if (selectedDraw && hasCompleteDrawResults(selectedDraw)) {
+      selectedDraw.results?.forEach((result, index) => {
+        const winningNumber = getResultDigitsForPlay(selectedDraw, result, 2, 'chance', index);
+        if (data[winningNumber]) data[winningNumber].type = getWinningPosition(index);
+      });
     }
 
     return data;
@@ -209,7 +197,7 @@ export const ResultsPage: React.FC = () => {
       const rate = seller ? seller.commission : settings.commissionRate;
       commission += (ticketSales * rate);
 
-      if (draw.results && draw.results.length === 3) {
+      if (hasCompleteDrawResults(draw)) {
         prizes += calculateTicketPayoutForDraw(ticket, draw, settings);
       }
     });
@@ -234,17 +222,14 @@ export const ResultsPage: React.FC = () => {
     }, 0);
   }, [selectedDrawId, tickets]);
 
-  const handleResultInput = (val: string, setter: (v: string) => void, nextRef?: React.RefObject<HTMLInputElement>) => {
-    const cleanVal = val.replace(/\D/g, '').slice(0, resultDigits);
-    setter(cleanVal);
-    if (cleanVal.length === resultDigits && nextRef?.current) {
-      nextRef.current.focus();
+  const handleResultInput = (index: number, val: string) => {
+    const requiredDigits = selectedDraw ? getDrawPrizeDigits(selectedDraw, index) : 2;
+    const cleanVal = val.replace(/\D/g, '').slice(0, requiredDigits);
+    setResultValues((previous) => previous.map((result, resultIndex) => resultIndex === index ? cleanVal : result));
+    if (cleanVal.length === requiredDigits && index + 1 < resultCount) {
+      resultInputRefs.current[index + 1]?.focus();
     }
   };
-
-  const r1Ref = React.useRef<HTMLInputElement>(null);
-  const r2Ref = React.useRef<HTMLInputElement>(null);
-  const r3Ref = React.useRef<HTMLInputElement>(null);
 
   return (
     <div className="flex flex-col h-full bg-[#0B1220] text-white select-none overflow-hidden">
@@ -278,7 +263,7 @@ export const ResultsPage: React.FC = () => {
               {filteredDraws.map((draw) => {
                 const financials = drawFinancials.get(draw.id);
                 const prizesExceedSales = !!financials && financials.totalPrizes > financials.totalSales;
-                const hasResults = !!draw.results?.length;
+                const hasResults = hasCompleteDrawResults(draw);
                 const canEnterResults = isCEO && !hasResults;
                 const openResultEditor = () => {
                   setSelectedDrawId(draw.id);
@@ -319,11 +304,12 @@ export const ResultsPage: React.FC = () => {
 
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     {hasResults ? (
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <div className="grid grid-cols-3 gap-1.5">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
                           {draw.results.map((r, i) => (
                             <div key={i} className={cn(
-                              "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border",
+                              "h-8 min-w-8 shrink-0 rounded-lg px-1 flex items-center justify-center text-xs font-black border",
+                              r.length > 6 && "min-w-[58px] text-[9px]",
                               "bg-white text-slate-900 border-white"
                             )}>
                               {r}
@@ -406,57 +392,48 @@ export const ResultsPage: React.FC = () => {
 
               {/* Results Input */}
               <div className="bg-[#121A2B] rounded-2xl p-4 border border-white/5 shadow-lg">
-                <div className="flex justify-center gap-4 mb-4">
-                  <div className="flex flex-col items-center gap-1.5">
-                    <span className="text-[7px] font-black text-yellow-400 uppercase tracking-widest">1ro</span>
-                    <input
-                      ref={r1Ref}
-                      type="text"
-                      inputMode="numeric"
-                      value={r1}
-                      onChange={(e) => handleResultInput(e.target.value, setR1, r2Ref)}
-                      placeholder={resultDigits === 4 ? '----' : '--'}
-                      className={cn(
-                        "w-12 h-12 rounded-xl text-center text-lg font-black border-2 transition-all outline-none",
-                        r1 ? "bg-yellow-400 text-black border-yellow-400" : "bg-[#0B1220] text-slate-500 border-white/5 focus:border-yellow-400/50"
-                      )}
-                    />
-                  </div>
-                  <div className="flex flex-col items-center gap-1.5">
-                    <span className="text-[7px] font-black text-blue-500 uppercase tracking-widest">2do</span>
-                    <input
-                      ref={r2Ref}
-                      type="text"
-                      inputMode="numeric"
-                      value={r2}
-                      onChange={(e) => handleResultInput(e.target.value, setR2, r3Ref)}
-                      placeholder={resultDigits === 4 ? '----' : '--'}
-                      className={cn(
-                        "w-12 h-12 rounded-xl text-center text-lg font-black border-2 transition-all outline-none",
-                        r2 ? "bg-blue-500 text-black border-blue-500" : "bg-[#0B1220] text-slate-500 border-white/5 focus:border-blue-500/50"
-                      )}
-                    />
-                  </div>
-                  <div className="flex flex-col items-center gap-1.5">
-                    <span className="text-[7px] font-black text-orange-500 uppercase tracking-widest">3ro</span>
-                    <input
-                      ref={r3Ref}
-                      type="text"
-                      inputMode="numeric"
-                      value={r3}
-                      onChange={(e) => handleResultInput(e.target.value, setR3)}
-                      placeholder={resultDigits === 4 ? '----' : '--'}
-                      className={cn(
-                        "w-12 h-12 rounded-xl text-center text-lg font-black border-2 transition-all outline-none",
-                        r3 ? "bg-orange-500 text-black border-orange-500" : "bg-[#0B1220] text-slate-500 border-white/5 focus:border-orange-500/50"
-                      )}
-                    />
-                  </div>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
+                  {resultValues.map((result, index) => {
+                    const resultDigits = selectedDraw ? getDrawPrizeDigits(selectedDraw, index) : 2;
+                    const filledClass = index === 0
+                      ? 'bg-yellow-400 text-black border-yellow-400'
+                      : index === 1
+                        ? 'bg-blue-500 text-black border-blue-500'
+                        : index === 2
+                          ? 'bg-orange-500 text-black border-orange-500'
+                          : 'bg-emerald-400 text-black border-emerald-400';
+                    const focusClass = index === 0
+                      ? 'focus:border-yellow-400/50'
+                      : index === 1
+                        ? 'focus:border-blue-500/50'
+                        : index === 2
+                          ? 'focus:border-orange-500/50'
+                          : 'focus:border-emerald-400/50';
+                    return (
+                      <div key={index} className="flex min-w-0 flex-col items-center gap-1.5">
+                        <span className="text-[7px] font-black uppercase tracking-widest text-slate-300">{getPrizePositionLabel(index)}</span>
+                        <input
+                          ref={(element) => { resultInputRefs.current[index] = element; }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={resultDigits}
+                          value={result}
+                          onChange={(event) => handleResultInput(index, event.target.value)}
+                          placeholder={'-'.repeat(resultDigits)}
+                          className={cn(
+                            "h-12 w-full min-w-0 rounded-xl border-2 text-center font-black transition-all outline-none",
+                            resultDigits > 6 ? 'text-xs' : resultDigits > 4 ? 'text-sm' : 'text-lg',
+                            result ? filledClass : cn('bg-[#0B1220] text-slate-500 border-white/5', focusClass)
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-2">
                   <button
-                    disabled={!r1 || !r2 || !r3}
+                    disabled={resultValues.slice(0, resultCount).length !== resultCount || resultValues.slice(0, resultCount).some((result, index) => result.length !== (selectedDraw ? getDrawPrizeDigits(selectedDraw, index) : 2))}
                     onClick={handleSave}
                     className="flex-1 bg-brand-primary text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md shadow-brand-primary/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >

@@ -140,7 +140,7 @@ export const PrinterSettingsSection: React.FC = () => {
 
       {!isNativePrinterAvailable() && (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs font-bold leading-relaxed text-slate-300">
-          La búsqueda directa de dispositivos está disponible en el APK. En navegador, Print abre el diálogo de impresión del sistema para seleccionar impresoras instaladas.
+          Busca, conecta y guarda impresoras desde el APK. En navegador no hay conexión Bluetooth directa; Print BT avisa si no hay dispositivo conectado.
         </div>
       )}
 
@@ -186,7 +186,7 @@ export const PrinterSettingsSection: React.FC = () => {
             className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-2.5 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-50"
           >
             {busyPrinterId === device.id ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
-            Probar
+            Conectar y probar
           </button>
         </div>
       ))}

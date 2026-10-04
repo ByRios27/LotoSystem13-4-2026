@@ -25,7 +25,7 @@ import { PullToRefresh } from './PullToRefresh';
 import { buildDrawEntries, cloneDrawEntryMap, normalizeTicketDrawEntries } from '../utils/ticketUtils';
 
 type InputTarget = 'number' | 'amount';
-type GameMode = 'CHANCE' | 'PALÉ' | 'BILLETE';
+type GameMode = 'CHANCE' | 'PALÉ' | 'BILLETE' | 'BILLETE_ESPECIAL';
 
 export const SalesPanel: React.FC = () => {
   const {
@@ -97,12 +97,17 @@ export const SalesPanel: React.FC = () => {
   }, [chancePrices, selectedPriceId]);
 
   const currentPricePerUnit = useMemo(() => {
+    const selectedDraw = draws.find((draw) => draw.id === selectedDrawIds[0]);
+    if (gameMode === 'CHANCE' && selectedDraw?.drawType === 'special') {
+      return selectedDraw.chancePricePerPiece ?? 0;
+    }
+    if (gameMode === 'BILLETE' || gameMode === 'BILLETE_ESPECIAL') return settings.billete?.unitPrice ?? 1;
     if (gameMode !== 'CHANCE' || chancePrices.length === 0) {
         return settings.pricePerTime || 1;
     }
     const selectedPrice = chancePrices.find(p => p.id === selectedPriceId) || chancePrices.find(p => p.isDefault) || chancePrices[0];
     return selectedPrice?.value || 1;
-  }, [gameMode, settings.pricePerTime, chancePrices, selectedPriceId]);
+  }, [draws, selectedDrawIds, gameMode, settings.pricePerTime, chancePrices, selectedPriceId]);
 
   const resetEntryState = () => {
     setDrawEntryMap({});
@@ -228,12 +233,21 @@ export const SalesPanel: React.FC = () => {
 
   useEffect(() => {
     if (!mainDraw) return;
-    const maxDigits = gameMode === 'PALÉ' ? 4 : mainDraw.digitsMode;
+    const maxDigits = gameMode === 'CHANCE' ? 2 : gameMode === 'BILLETE_ESPECIAL' ? (mainDraw.specialBilleteDigits || 5) : 4;
     if (numberInput.length > maxDigits) {
       setNumberInput(prev => prev.slice(0, maxDigits)); 
     }
     if (gameMode === 'PALÉ' && !mainDraw.allowedSpecialBets.pale) setGameMode('CHANCE');
-    if (gameMode === 'BILLETE' && (mainDraw.digitsMode !== 4 || !mainDraw.allowedSpecialBets.billete)) setGameMode('CHANCE');
+    if (gameMode === 'BILLETE' && !mainDraw.allowedSpecialBets.billete) setGameMode('CHANCE');
+    if (gameMode === 'BILLETE_ESPECIAL' && (mainDraw.drawType !== 'special' || !mainDraw.allowedSpecialBets.billeteExtra)) setGameMode('CHANCE');
+    if (gameMode === 'CHANCE' && mainDraw.drawType === 'special' && mainDraw.allowedSpecialBets.chance === false) {
+      const nextMode = mainDraw.allowedSpecialBets.billeteExtra
+        ? 'BILLETE_ESPECIAL'
+        : mainDraw.allowedSpecialBets.billete
+          ? 'BILLETE'
+          : mainDraw.allowedSpecialBets.pale ? 'PALÉ' : 'CHANCE';
+      if (nextMode !== gameMode) setGameMode(nextMode);
+    }
   }, [mainDraw, numberInput, gameMode]);
 
   const handleSetGameMode = (mode: GameMode) => {
@@ -252,7 +266,7 @@ export const SalesPanel: React.FC = () => {
       return;
     }
 
-    const maxDigits = gameMode === 'CHANCE' ? 2 : (gameMode === 'PALÉ' ? 4 : mainDraw.digitsMode);
+    const maxDigits = gameMode === 'CHANCE' ? 2 : gameMode === 'BILLETE_ESPECIAL' ? (mainDraw.specialBilleteDigits || 5) : 4;
 
     if (activeInput === 'number') {
       if (numberInput.length < maxDigits) {
@@ -365,18 +379,24 @@ export const SalesPanel: React.FC = () => {
         return next;
       });
 
-    } else if (gameMode === 'BILLETE') {
+    } else if (gameMode === 'BILLETE' || gameMode === 'BILLETE_ESPECIAL') {
+      const isExtraBillete = gameMode === 'BILLETE_ESPECIAL';
       const billeteSettings = settings.billete || { enabled: false, unitPrice: 1.00 };
       if (!billeteSettings.enabled) {
         alert('El modo de juego Billete está desactivado en la configuración.');
         return;
       }
-      if (mainDraw.digitsMode !== 4) {
-        alert('El modo Billete solo está permitido en sorteos de 4 cifras.');
+      if (isExtraBillete && (mainDraw.drawType !== 'special' || !mainDraw.allowedSpecialBets.billeteExtra)) {
+        alert('Billete Extraordinario no está habilitado en este sorteo.');
         return;
       }
-      if (numberInput.length !== 4) {
-        alert('Para Billete, debes ingresar un número de 4 cifras.');
+      if (!isExtraBillete && !mainDraw.allowedSpecialBets.billete) {
+        alert('Billete no está habilitado para este sorteo.');
+        return;
+      }
+      const requiredDigits = isExtraBillete ? (mainDraw.specialBilleteDigits || 5) : 4;
+      if (numberInput.length !== requiredDigits) {
+        alert(`Para ${isExtraBillete ? 'Billete Extraordinario' : 'Billete'}, debes ingresar un número de ${requiredDigits} cifras.`);
         return;
       }
       const units = parseInt(amountInput, 10);
@@ -384,18 +404,20 @@ export const SalesPanel: React.FC = () => {
         alert('Por favor, ingrese una cantidad de piezas válida.');
         return;
       }
-      const finalAmount = Number((units * billeteSettings.unitPrice).toFixed(2));
+      const unitPrice = billeteSettings.unitPrice ?? 1;
+      const finalAmount = Number((units * unitPrice).toFixed(2));
+      const entryType: Entry['type'] = isExtraBillete ? 'BILLETE_ESPECIAL' : 'BILLETE';
 
       setDrawEntryMap((prev) => {
         const next = { ...prev };
         targetDrawIds.forEach((drawId) => {
           const newEntries = [...(next[drawId] || [])];
-          const existingIndex = newEntries.findIndex((e) => e.number === numberInput && e.type === 'BILLETE');
+          const existingIndex = newEntries.findIndex((e) => e.number === numberInput && e.type === entryType);
           
           if (editingEntryId) {
             const idx = newEntries.findIndex((entry) => entry.id === editingEntryId);
             if (idx !== -1) {
-              newEntries[idx] = { ...newEntries[idx], number: numberInput, amount: finalAmount, pieces: units, type: 'BILLETE' };
+              newEntries[idx] = { ...newEntries[idx], number: numberInput, amount: finalAmount, pieces: units, type: entryType };
               next[drawId] = newEntries;
               return;
             }
@@ -403,9 +425,9 @@ export const SalesPanel: React.FC = () => {
 
           if (existingIndex >= 0) {
             newEntries[existingIndex].pieces += units;
-            newEntries[existingIndex].amount = Number((newEntries[existingIndex].pieces * billeteSettings.unitPrice).toFixed(2));
+            newEntries[existingIndex].amount = Number((newEntries[existingIndex].pieces * unitPrice).toFixed(2));
           } else {
-            newEntries.push({ id: generateId(), number: numberInput, amount: finalAmount, pieces: units, type: 'BILLETE', status: 'pending' });
+            newEntries.push({ id: generateId(), number: numberInput, amount: finalAmount, pieces: units, type: entryType, status: 'pending' });
           }
           next[drawId] = newEntries;
         });
@@ -413,27 +435,39 @@ export const SalesPanel: React.FC = () => {
       });
 
     } else { // CHANCE
-      if (numberInput.length !== 2 || !amountInput) return;
+      const requiredDigits = 2;
+      if (numberInput.length !== requiredDigits || !amountInput) return;
+      if (mainDraw.drawType === 'special' && mainDraw.allowedSpecialBets.chance === false) {
+        alert('Chance no está habilitado en este sorteo.');
+        return;
+      }
       const units = parseInt(amountInput, 10);
       if (isNaN(units) || units <= 0) return;
 
-      const price = chancePrices.find(p => p.id === selectedPriceId) || chancePrices.find(p => p.isDefault) || chancePrices[0];
-      if (!price) {
+      const price = mainDraw.drawType === 'special'
+        ? undefined
+        : chancePrices.find(p => p.id === selectedPriceId) || chancePrices.find(p => p.isDefault) || chancePrices[0];
+      if (mainDraw.drawType !== 'special' && !price) {
         alert('No hay precios configurados para Chances. Por favor, configure los precios en Ajustes.');
         return;
       }
-      const amount = Number((units * price.value).toFixed(2));
+      const unitPrice = mainDraw.drawType === 'special' ? (mainDraw.chancePricePerPiece ?? 0) : price!.value;
+      const amount = Number((units * unitPrice).toFixed(2));
+      const entryPriceId = mainDraw.drawType === 'special' ? undefined : price!.id;
 
       setDrawEntryMap((prev) => {
         const next = { ...prev };
         targetDrawIds.forEach((drawId) => {
           const newEntries = [...(next[drawId] || [])];
-          const existingIndex = newEntries.findIndex((e) => e.number === numberInput && e.type === 'CHANCE' && e.priceId === price.id);
+          const existingIndex = newEntries.findIndex((e) => e.number === numberInput && e.type === 'CHANCE' && e.priceId === entryPriceId);
 
           if (editingEntryId) {
             const idx = newEntries.findIndex((entry) => entry.id === editingEntryId);
             if (idx !== -1) {
-              newEntries[idx] = { ...newEntries[idx], number: numberInput, amount, pieces: units, type: 'CHANCE', priceId: price.id };
+              const updatedEntry = { ...newEntries[idx], number: numberInput, amount, pieces: units, type: 'CHANCE' as const };
+              if (entryPriceId) updatedEntry.priceId = entryPriceId;
+              else delete updatedEntry.priceId;
+              newEntries[idx] = updatedEntry;
               next[drawId] = newEntries;
               return;
             }
@@ -443,7 +477,7 @@ export const SalesPanel: React.FC = () => {
             newEntries[existingIndex].pieces += units;
             newEntries[existingIndex].amount += amount;
           } else {
-            newEntries.push({ id: generateId(), number: numberInput, amount, pieces: units, type: 'CHANCE', priceId: price.id, status: 'pending' });
+            newEntries.push({ id: generateId(), number: numberInput, amount, pieces: units, type: 'CHANCE', ...(entryPriceId ? { priceId: entryPriceId } : {}), status: 'pending' });
           }
           next[drawId] = newEntries;
         });
@@ -564,6 +598,13 @@ export const SalesPanel: React.FC = () => {
   };
 
   const toggleDrawSelection = (id: string) => {
+    const draw = activeDraws.find((item) => item.id === id);
+    if (draw?.drawType === 'special') {
+      setSelectedDrawIds([id]);
+      setIsMultiMode(false);
+      setIsDrawListOpen(false);
+      return;
+    }
     if (isMultiMode) {
       setSelectedDrawIds(prev => {
         if (prev.includes(id)) {
@@ -599,7 +640,7 @@ export const SalesPanel: React.FC = () => {
                 </div>
               </div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); setIsMultiMode(!isMultiMode); if (!isMultiMode) { setIsDrawListOpen(true); } else { setSelectedDrawIds(prev => [prev[0]]); setIsDrawListOpen(false); } }} className={cn("px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter border transition-all", isMultiMode ? "bg-brand-primary text-white border-brand-primary shadow-lg shadow-brand-primary/20" : "bg-slate-800 text-slate-400 border-white/5")}>Múltiple</button>
+            <button disabled={mainDraw?.drawType === 'special'} onClick={(e) => { e.stopPropagation(); setIsMultiMode(!isMultiMode); if (!isMultiMode) { setIsDrawListOpen(true); } else { setSelectedDrawIds(prev => [prev[0]]); setIsDrawListOpen(false); } }} className={cn("px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-tighter border transition-all disabled:opacity-30", isMultiMode ? "bg-brand-primary text-white border-brand-primary shadow-lg shadow-brand-primary/20" : "bg-slate-800 text-slate-400 border-white/5")}>Múltiple</button>
           </div>
           <AnimatePresence>
             {isDrawListOpen && (
@@ -607,7 +648,7 @@ export const SalesPanel: React.FC = () => {
                 <div className="max-h-[200px] overflow-y-auto divide-y divide-white/5">
                   {isMultiMode && (
                     <div className="flex justify-end gap-3 px-3 py-1">
-                      <button onClick={() => setSelectedDrawIds(sortDrawsByTime(activeDraws).map(d => d.id))} className="text-[9px] font-bold uppercase tracking-widest text-slate-500 active:text-white">Todos</button>
+                      <button onClick={() => setSelectedDrawIds(sortDrawsByTime(activeDraws.filter((draw) => draw.drawType !== 'special')).map(d => d.id))} className="text-[9px] font-bold uppercase tracking-widest text-slate-500 active:text-white">Todos</button>
                       {/* Siempre queda un sorteo seleccionado */}
                       <button onClick={() => setSelectedDrawIds(prev => prev.slice(0, 1))} className="text-[9px] font-bold uppercase tracking-widest text-slate-500 active:text-white">Ninguno</button>
                     </div>
@@ -625,24 +666,25 @@ export const SalesPanel: React.FC = () => {
         </div>
 
         {/* Game Mode Tabs */}
-        <div className="flex gap-1.5 bg-card-bg p-1 rounded-xl border border-white/5 h-10 mb-2">
-          <button onClick={() => handleSetGameMode('CHANCE')} className={cn("flex-1 rounded-lg font-bold text-xs uppercase tracking-wider transition-all", gameMode === 'CHANCE' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Chance</button>
-          <div className="flex-1 flex gap-1 bg-white/5 p-0.5 rounded-lg">
-            {mainDraw?.allowedSpecialBets.pale && <button onClick={() => handleSetGameMode('PALÉ')} className={cn("flex-1 rounded-md font-bold text-[10px] uppercase tracking-wider transition-all", gameMode === 'PALÉ' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Palé</button>}
-            {mainDraw?.digitsMode === 4 && mainDraw?.allowedSpecialBets.billete && <button onClick={() => handleSetGameMode('BILLETE')} className={cn("flex-1 rounded-md font-bold text-[10px] uppercase tracking-wider transition-all", gameMode === 'BILLETE' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Billete</button>}
-          </div>
+        <div className="flex gap-1 bg-card-bg p-1 rounded-xl border border-white/5 h-10 mb-2">
+          {(mainDraw?.drawType !== 'special' || mainDraw.allowedSpecialBets.chance !== false) && <button onClick={() => handleSetGameMode('CHANCE')} className={cn("min-w-0 flex-1 rounded-lg px-1 font-bold text-[10px] uppercase tracking-wider transition-all", gameMode === 'CHANCE' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Chance</button>}
+          {mainDraw?.allowedSpecialBets.pale && <button onClick={() => handleSetGameMode('PALÉ')} className={cn("min-w-0 flex-1 rounded-lg px-1 font-bold text-[10px] uppercase tracking-wider transition-all", gameMode === 'PALÉ' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Palé</button>}
+          {mainDraw?.allowedSpecialBets.billete && <button onClick={() => handleSetGameMode('BILLETE')} className={cn("min-w-0 flex-1 rounded-lg px-1 font-bold text-[10px] uppercase tracking-wider transition-all", gameMode === 'BILLETE' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Billete</button>}
+          {mainDraw?.drawType === 'special' && mainDraw.allowedSpecialBets.billeteExtra && <button onClick={() => handleSetGameMode('BILLETE_ESPECIAL')} className={cn("min-w-0 flex-1 rounded-lg px-1 font-bold text-[9px] uppercase tracking-wider transition-all", gameMode === 'BILLETE_ESPECIAL' ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20" : "text-slate-500 hover:text-white")}>Billete +</button>}
         </div>
 
         {/* Inputs */}
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => setActiveInput('number')} className={cn("bg-card-bg rounded-2xl h-20 flex flex-col items-center justify-center border-2 transition-all relative overflow-hidden", activeInput === 'number' ? "border-brand-primary bg-brand-primary/10" : "border-transparent")}>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Número</p>
-            <p className="text-3xl font-black tracking-widest leading-none">{gameMode === 'PALÉ' ? (numberInput ? <>{numberInput.substring(0, 2)}{numberInput.length > 2 && <span className="text-brand-primary mx-1">-</span>}{numberInput.substring(2)}</> : '-- --') : (numberInput || (mainDraw?.digitsMode === 4 ? '----' : '--'))}</p>
+            <p className="text-3xl font-black tracking-widest leading-none">{gameMode === 'PALÉ' ? (numberInput ? <>{numberInput.substring(0, 2)}{numberInput.length > 2 && <span className="text-brand-primary mx-1">-</span>}{numberInput.substring(2)}</> : '-- --') : (numberInput || (gameMode === 'BILLETE' ? '----' : gameMode === 'BILLETE_ESPECIAL' ? '-'.repeat(mainDraw?.specialBilleteDigits || 5) : '--'))}</p>
           </button>
           <div className={cn("bg-card-bg rounded-2xl h-20 flex flex-col items-center justify-center border-2 transition-all relative", activeInput === 'amount' ? "border-brand-primary bg-brand-primary/10" : "border-transparent")} onClick={() => { setActiveInput('amount'); if (amountInput === '1') setAmountInput(''); }}>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                <span>{ gameMode === 'CHANCE' || gameMode === 'BILLETE' ? 'Piezas' : 'Monto'}</span>
-                {gameMode === 'CHANCE' && chancePrices.length > 1 && (
+                <span>{ gameMode === 'CHANCE' || gameMode === 'BILLETE' || gameMode === 'BILLETE_ESPECIAL' ? 'Piezas' : 'Monto'}</span>
+                {gameMode === 'CHANCE' && mainDraw?.drawType === 'special' ? (
+                  <span className="rounded-md bg-slate-700/50 px-1.5 text-[10px] font-bold text-slate-300">Especial ${formatCurrency(mainDraw.chancePricePerPiece ?? 0)}</span>
+                ) : gameMode === 'CHANCE' && chancePrices.length > 1 && (
                   <div className='relative'>
                       <button onClick={(e) => { e.stopPropagation(); setIsPriceSelectorOpen(prev => !prev); }} className='bg-slate-700/50 rounded-md px-1.5 text-slate-300 flex items-center gap-1 text-[10px] font-bold'>
                           {selectedPriceName} <ChevronDown size={12}/>
@@ -750,7 +792,7 @@ export const SalesPanel: React.FC = () => {
         </div>
       </PullToRefresh>
       
-      <QuickPasteModal isOpen={isQuickPasteOpen} onClose={() => setIsQuickPasteOpen(false)} onConfirm={handleQuickPaste} gameMode={gameMode} chancePrice={chancePrices.find((price) => price.id === selectedPriceId) || chancePrices.find((price) => price.isDefault) || chancePrices[0]} isInverted={isInverted} setIsInverted={setIsInverted} />
+      <QuickPasteModal isOpen={isQuickPasteOpen} onClose={() => setIsQuickPasteOpen(false)} onConfirm={handleQuickPaste} gameMode={gameMode} requiredDigits={gameMode === 'PALÉ' || gameMode === 'BILLETE' ? 4 : gameMode === 'BILLETE_ESPECIAL' ? mainDraw?.specialBilleteDigits || 5 : 2} unitPrice={gameMode === 'CHANCE' && mainDraw?.drawType === 'special' ? mainDraw.chancePricePerPiece : undefined} chancePrice={mainDraw?.drawType === 'special' ? undefined : chancePrices.find((price) => price.id === selectedPriceId) || chancePrices.find((price) => price.isDefault) || chancePrices[0]} isInverted={isInverted} setIsInverted={setIsInverted} />
       <ReuseDrawSelectionModal isOpen={isReuseModalOpen} onClose={() => { setIsReuseModalOpen(false); setPendingReusedTicket(null); }} onConfirm={handleConfirmReuse} activeDraws={activeDraws} />
       <SaleCustomerModal isOpen={isCustomerModalOpen} onClose={() => setIsCustomerModalOpen(false)} onConfirm={handleGenerateTicket} isSubmitting={isProcessingSale} initialName={prefilledCustomerName} previewGroups={previewGroups} totalAmount={totalAmount} isEditing={!!editingTicket} />
       {showTicket && lastTicket && <TicketModal ticket={lastTicket} onClose={() => setShowTicket(false)} saleConfirmation />}

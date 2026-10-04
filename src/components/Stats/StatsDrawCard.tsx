@@ -8,6 +8,7 @@ import { StatsResultsHeader } from './StatsResultsHeader';
 import { StatsNumberGrid } from './StatsNumberGrid';
 import { StatsCombinationsSection } from './StatsCombinationsSection';
 import { TicketsForNumberModal } from '../Sales/TicketsForNumberModal';
+import { getResultDigitsForPlay, hasCompleteDrawResults } from '../../utils/drawUtils';
 
 interface DrawStatsProps {
   draw: Draw;
@@ -25,10 +26,13 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
     const pricePerTime = settings.pricePerTime || 1;
 
     const totalSoldMoney = drawTickets.reduce((sum, t) => sum + calculateTicketSalesForDraw(t, draw.id), 0);
-    const totalFractions = totalSoldMoney / pricePerTime;
+    const totalChancePieces = drawTickets.reduce((sum, ticket) => (
+      sum + getEntriesForDraw(ticket, draw.id).reduce((entrySum, entry) => entrySum + (entry.type === 'CHANCE' ? entry.pieces : 0), 0)
+    ), 0);
+    const totalFractions = draw.drawType === 'special' ? totalChancePieces : totalSoldMoney / pricePerTime;
 
     let totalPrizes = 0;
-    if (draw.results && draw.results.length === 3) {
+    if (hasCompleteDrawResults(draw)) {
       drawTickets.forEach(t => {
         totalPrizes += calculateTicketPayoutForDraw(t, draw, settings);
       });
@@ -61,7 +65,7 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
             combinationsMap[key] = { ...e, amount: amountForDraw };
             (combinationsMap[key] as any).quantity = pieces;
           }
-        } else if (e.type === 'BILLETE') {
+        } else if (e.type === 'BILLETE' || e.type === 'BILLETE_ESPECIAL') {
           const key = `${e.type}-${e.number}`;
           if (combinationsMap[key]) {
             combinationsMap[key].amount = Number((combinationsMap[key].amount + amountForDraw).toFixed(2));
@@ -78,7 +82,7 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
     });
 
     const combinations = Object.values(combinationsMap);
-    const hasResults = !!draw.results && draw.results.length === 3;
+    const hasResults = hasCompleteDrawResults(draw);
     const isLoss = totalPrizes > totalSoldMoney;
     const isWinnerDraw = hasResults && totalPrizes > 0 && !isLoss;
 
@@ -168,7 +172,7 @@ export const StatsDrawCard: React.FC<DrawStatsProps> = ({ draw, tickets }) => {
               <StatsNumberGrid 
                 drawId={draw.id}
                 salesByNumber={stats.salesByNumber} 
-                results={draw.results}
+                results={draw.results?.map((result, index) => getResultDigitsForPlay(draw, result, 2, 'chance', index))}
               />
 
                 <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-4 px-1">

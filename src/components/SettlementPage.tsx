@@ -145,7 +145,7 @@ export const SettlementPage: React.FC = () => {
           isLiquidationPositive ? 'border-emerald-400/20 bg-emerald-500/10' : 'border-rose-400/20 bg-rose-500/10'
         )}>
           <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">Balance de liquidación</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">Utilidad</p>
             <p className="mt-1 text-[9px] font-bold text-slate-400">Ventas − premios − comisión</p>
           </div>
           <p className={cn('shrink-0 text-xl font-black', isLiquidationPositive ? 'text-emerald-300' : 'text-rose-300')}>

@@ -41,7 +41,7 @@ export const SettlementReceipt: React.FC<SettlementReceiptProps> = ({
       </div>
 
       <div className={`flex items-center justify-between rounded-lg px-4 py-4 text-white ${isPositive ? 'bg-emerald-700' : 'bg-rose-700'}`}>
-        <span className="text-xs font-black uppercase tracking-widest">Balance de liquidación</span>
+        <span className="text-xs font-black uppercase tracking-widest">Utilidad</span>
         <span className="text-2xl font-black">{isPositive ? '+' : '−'}${formatCurrency(Math.abs(stats.netProfit))}</span>
       </div>
     </div>

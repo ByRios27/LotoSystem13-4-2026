@@ -51,8 +51,6 @@ interface ArchiveRecord {
   drawSnapshots: Draw[];
 }
 
-type ArchiveMode = 'day' | 'month' | 'year' | 'range';
-
 function safeNumber(value: unknown): number {
   const num = Number(value);
   return Number.isFinite(num) ? num : 0;
@@ -76,7 +74,6 @@ export const ArchivePage: React.FC = () => {
   const [archiveRecords, setArchiveRecords] = useState<ArchiveRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [recordsLoading, setRecordsLoading] = useState(false);
-  const [mode, setMode] = useState<ArchiveMode>('day');
   const [selectedUserId, setSelectedUserId] = useState(currentUser?.id || 'all');
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [expandedDrawId, setExpandedDrawId] = useState<string | null>(null);
@@ -84,10 +81,6 @@ export const ArchivePage: React.FC = () => {
 
   const today = getBusinessDate();
   const [singleDate, setSingleDate] = useState(today);
-  const [selectedMonth, setSelectedMonth] = useState(today.slice(0, 7));
-  const [selectedYear, setSelectedYear] = useState(Number(today.slice(0, 4)));
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -152,18 +145,8 @@ export const ArchivePage: React.FC = () => {
   }, [currentUser?.id, currentUser?.role, selectedUserId]);
 
   const selectedEntries = useMemo(() => {
-    if (mode === 'day') {
-      return archives.filter((item) => item.businessDate === singleDate);
-    }
-
-    if (mode === 'month') return archives.filter((item) => item.businessDate.startsWith(selectedMonth));
-    if (mode === 'year') return archives.filter((item) => item.businessDate.startsWith(`${selectedYear}-`));
-
-    const start = fromDate <= toDate ? fromDate : toDate;
-    const end = fromDate <= toDate ? toDate : fromDate;
-
-    return archives.filter((item) => item.businessDate >= start && item.businessDate <= end);
-  }, [archives, mode, singleDate, selectedMonth, selectedYear, fromDate, toDate]);
+    return archives.filter((item) => item.businessDate === singleDate);
+  }, [archives, singleDate]);
 
   const selectedArchive = selectedEntries.find((archive) => archive.id === selectedArchiveId) || selectedEntries[0] || null;
 
@@ -181,13 +164,13 @@ export const ArchivePage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (mode === 'day' && selectedEntries.length > 0 && !selectedEntries.some((archive) => archive.id === selectedArchiveId)) {
+    if (selectedEntries.length > 0 && !selectedEntries.some((archive) => archive.id === selectedArchiveId)) {
       setSelectedArchiveId(selectedEntries[0].id);
     }
-  }, [mode, selectedEntries, selectedArchiveId]);
+  }, [selectedEntries, selectedArchiveId]);
 
   useEffect(() => {
-    if (mode !== 'day' || !selectedArchive) {
+    if (!selectedArchive) {
       setArchiveRecords([]);
       setRecordsLoading(false);
       return;
@@ -219,7 +202,7 @@ export const ArchivePage: React.FC = () => {
     void loadRecords();
 
     return () => { cancelled = true; };
-  }, [mode, selectedArchive?.id, selectedArchive?.businessDate, selectedArchive?.userId]);
+  }, [selectedArchive?.id, selectedArchive?.businessDate, selectedArchive?.userId]);
 
   const accumulated = useMemo(() => {
     return selectedEntries.reduce(
@@ -238,31 +221,6 @@ export const ArchivePage: React.FC = () => {
     <div className="h-full flex flex-col bg-[#0B1220] text-white overflow-hidden">
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3 pb-24">
         <div className="bg-[#121A2B] rounded-xl p-3 border border-white/5 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setMode('day')}
-              className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
-                mode === 'day'
-                  ? 'bg-brand-primary/20 border-brand-primary/40 text-brand-primary'
-                  : 'bg-white/5 border-white/10 text-slate-400'
-              }`}
-            >
-              Día
-            </button>
-            <button
-              onClick={() => setMode('month')}
-              className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
-                mode === 'month'
-                  ? 'bg-brand-primary/20 border-brand-primary/40 text-brand-primary'
-                  : 'bg-white/5 border-white/10 text-slate-400'
-              }`}
-            >
-              Mes
-            </button>
-            <button onClick={() => setMode('year')} className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${mode === 'year' ? 'bg-brand-primary/20 border-brand-primary/40 text-brand-primary' : 'bg-white/5 border-white/10 text-slate-400'}`}>Año</button>
-            <button onClick={() => setMode('range')} className={`py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${mode === 'range' ? 'bg-brand-primary/20 border-brand-primary/40 text-brand-primary' : 'bg-white/5 border-white/10 text-slate-400'}`}>Rango</button>
-          </div>
-
           {currentUser?.role === 'CEO' && (
             <div>
               <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Usuario</label>
@@ -273,48 +231,15 @@ export const ArchivePage: React.FC = () => {
             </div>
           )}
 
-          {mode === 'day' ? (
-            <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Fecha</label>
-              <input
-                type="date"
-                value={singleDate}
-                onChange={(e) => setSingleDate(e.target.value)}
-                className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-slate-200 outline-none"
-              />
-            </div>
-          ) : mode === 'month' ? (
-            <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Mes</label>
-              <input type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-slate-200 outline-none" />
-            </div>
-          ) : mode === 'year' ? (
-            <div>
-              <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Año</label>
-              <input type="number" min="2000" max="2100" value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-slate-200 outline-none" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-2">
-              <div>
-                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Desde</label>
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-slate-200 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Hasta</label>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-slate-200 outline-none"
-                />
-              </div>
-            </div>
-          )}
+          <div>
+            <label className="block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Fecha del archivo</label>
+            <input
+              type="date"
+              value={singleDate}
+              onChange={(event) => setSingleDate(event.target.value)}
+              className="w-full bg-[#0B1220] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-slate-200 outline-none"
+            />
+          </div>
         </div>
 
         <div className="bg-[#121A2B] rounded-xl p-3 border border-white/5">
@@ -339,7 +264,7 @@ export const ArchivePage: React.FC = () => {
           </div>
         </div>
 
-        {mode === 'day' && selectedArchive && (
+        {selectedArchive && (
           <div className="bg-[#121A2B] rounded-xl p-3 border border-white/5 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Detalle por sorteo</p>
@@ -429,7 +354,7 @@ export const ArchivePage: React.FC = () => {
             <button
               key={entry.id}
               type="button"
-              onClick={() => { setSelectedArchiveId(entry.id); setMode('day'); setSingleDate(entry.businessDate); }}
+              onClick={() => { setSelectedArchiveId(entry.id); setSingleDate(entry.businessDate); }}
               className="bg-[#121A2B] rounded-xl p-3 border border-white/5 flex items-start justify-between"
             >
               <div className="flex items-center gap-3">

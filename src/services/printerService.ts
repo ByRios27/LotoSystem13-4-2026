@@ -20,28 +20,6 @@ export async function discoverThermalPrinters(): Promise<DiscoveredPrinter[]> {
   return printers;
 }
 
-export async function connectAndTestThermalPrinter(
-  printerId: string,
-  paperWidth: ThermalPaperWidth,
-): Promise<void> {
-  const connection = await ThermalPrinter.connectPrinter({ printerId, paperWidthMm: paperWidth });
-  if (!connection.connected) throw new Error('No se pudo conectar con la impresora.');
-
-  await ThermalPrinter.printText({
-    printerId: connection.printerId,
-    paperWidthMm: paperWidth,
-    items: [
-      { type: 'text', value: 'LOTTOPRO\n', style: { align: 'center', bold: true } },
-      { type: 'text', value: 'PRUEBA DE IMPRESION\n', style: { align: 'center' } },
-      { type: 'divider', char: '-' },
-      { type: 'text', value: 'Impresora conectada correctamente.' },
-      { type: 'cut', mode: 'partial', feedBefore: 2 },
-    ],
-  });
-
-  await ThermalPrinter.setDefaultPrinter({ printerId: connection.printerId });
-}
-
 export async function setDefaultThermalPrinter(printerId: string, paperWidth?: ThermalPaperWidth): Promise<void> {
   const result = await ThermalPrinter.connectPrinter({ printerId, setAsDefault: true, paperWidthMm: paperWidth });
   if (!result.connected) throw new Error('No se pudo conectar con la impresora.');

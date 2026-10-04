@@ -3,7 +3,6 @@ import { Bluetooth, Check, CircleAlert, LoaderCircle, Printer, RefreshCw, Trash2
 import { ThermalPrinter, type DiscoveredPrinter, type PrinterProfile } from '@delicity/capacitor-thermal-printer';
 import { cn } from '../../utils/helpers';
 import {
-  connectAndTestThermalPrinter,
   discoverThermalPrinters,
   forgetThermalPrinter,
   getDefaultThermalPrinter,
@@ -14,6 +13,7 @@ import {
 import type { ThermalPaperWidth } from '../../utils/thermalReceipt';
 
 export const PrinterSettingsSection: React.FC = () => {
+  const nativePrinterAvailable = isNativePrinterAvailable();
   const [printers, setPrinters] = useState<DiscoveredPrinter[]>([]);
   const [profiles, setProfiles] = useState<PrinterProfile[]>([]);
   const [defaultPrinter, setDefaultPrinter] = useState<PrinterProfile | null>(null);
@@ -39,7 +39,10 @@ export const PrinterSettingsSection: React.FC = () => {
   }, []);
 
   const startScan = async () => {
-    if (!isNativePrinterAvailable()) return;
+    if (!nativePrinterAvailable) {
+      setMessage({ error: false, text: 'Buscar dispositivos está disponible en el APK.' });
+      return;
+    }
     const requestId = ++scanRequestRef.current;
     setPrinters([]);
     setMessage(null);
@@ -67,9 +70,9 @@ export const PrinterSettingsSection: React.FC = () => {
       const detectedWidth = device.capabilities?.paperWidthMm;
       const selectedWidth: ThermalPaperWidth = detectedWidth === 80 ? 80 : detectedWidth === 58 ? 58 : paperWidth;
       setPaperWidth(selectedWidth);
-      await connectAndTestThermalPrinter(device.id, selectedWidth);
+      await setDefaultThermalPrinter(device.id, selectedWidth);
       await refreshSaved();
-      setMessage({ error: false, text: `Prueba impresa. ${device.name} quedó como predeterminada.` });
+      setMessage({ error: false, text: `${device.name} se conectó y quedó guardada como predeterminada.` });
     } catch (error: any) {
       setMessage({ error: true, text: error?.message || 'No se pudo conectar con la impresora.' });
     } finally {
@@ -125,20 +128,19 @@ export const PrinterSettingsSection: React.FC = () => {
           <h2 className="text-sm font-black text-white uppercase tracking-widest">Impresoras</h2>
           <p className="text-xs text-slate-400 font-bold">Bluetooth, BLE, USB y red local.</p>
         </div>
-        {isNativePrinterAvailable() && (
-          <button
-            type="button"
-            onClick={startScan}
-            disabled={isScanning}
-            className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-brand-primary px-3 text-[10px] font-black uppercase tracking-wider text-black shadow-lg shadow-brand-primary/20 active:scale-95 disabled:opacity-50"
-          >
-            {isScanning ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            {isScanning ? 'Buscando' : 'Buscar'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={startScan}
+          disabled={isScanning || !nativePrinterAvailable}
+          title={nativePrinterAvailable ? 'Buscar impresoras cercanas' : 'La búsqueda de dispositivos requiere el APK'}
+          className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-brand-primary px-3 text-[10px] font-black uppercase tracking-wider text-black shadow-lg shadow-brand-primary/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isScanning ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+          {isScanning ? 'Buscando' : 'Buscar'}
+        </button>
       </div>
 
-      {!isNativePrinterAvailable() && (
+      {!nativePrinterAvailable && (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs font-bold leading-relaxed text-slate-300">
           Busca, conecta y guarda impresoras desde el APK. En navegador no hay conexión Bluetooth directa; Print BT avisa si no hay dispositivo conectado.
         </div>
@@ -186,15 +188,14 @@ export const PrinterSettingsSection: React.FC = () => {
             className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-2.5 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-50"
           >
             {busyPrinterId === device.id ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
-            Conectar y probar
+            Conectar
           </button>
         </div>
       ))}
 
-      {profiles.length > 0 && (
-        <div className="space-y-2 pt-1">
-          <h3 className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Dispositivos guardados</h3>
-          {profiles.map((profile) => (
+      <div className="space-y-2 pt-1">
+        <h3 className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Dispositivos guardados</h3>
+        {profiles.length > 0 ? profiles.map((profile) => (
             <div key={profile.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
               {transportIcon(profile.transport)}
               <div className="min-w-0 flex-1">
@@ -202,13 +203,14 @@ export const PrinterSettingsSection: React.FC = () => {
                 <p className="truncate text-[10px] text-slate-500">{profile.transport.toUpperCase()} · {profile.brand || profile.adapter.toUpperCase()}</p>
               </div>
               {defaultPrinter?.id !== profile.id && (
-                <button type="button" onClick={() => chooseDefault(profile)} disabled={busyPrinterId !== null} className="rounded-lg bg-white/10 px-2.5 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-50">Usar</button>
+                <button type="button" onClick={() => chooseDefault(profile)} disabled={busyPrinterId !== null} className="rounded-lg bg-white/10 px-2.5 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-50">Conectar</button>
               )}
               <button type="button" onClick={() => removePrinter(profile)} title="Quitar impresora guardada" className="rounded-lg p-2 text-slate-500 hover:text-rose-400"><Trash2 size={15} /></button>
             </div>
-          ))}
-        </div>
-      )}
+          )) : (
+          <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-[10px] font-bold text-slate-500">No hay dispositivos guardados.</p>
+        )}
+      </div>
 
       {message && (
         <div className={cn('flex items-center gap-2 rounded-xl border p-2.5 text-xs font-bold', message.error ? 'border-rose-400/20 bg-rose-400/10 text-rose-300' : 'border-lime-400/20 bg-lime-400/10 text-lime-300')}>

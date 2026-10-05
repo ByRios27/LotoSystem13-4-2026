@@ -2,7 +2,11 @@ import type { Draw, Ticket } from '../store/useStore';
 import { formatAMPM, formatCurrency, formatPlayNumberForDisplay, getCustomerDisplayName } from './helpers';
 import { normalizeTicketDrawEntries } from './ticketUtils';
 
-export type ThermalPaperWidth = 58 | 80;
+export const THERMAL_PAPER_WIDTHS = [48, 58, 72, 76, 80, 112] as const;
+export type ThermalPaperWidth = (typeof THERMAL_PAPER_WIDTHS)[number];
+
+const COLUMNS_BY_WIDTH: Record<ThermalPaperWidth, number> = { 48: 28, 58: 32, 72: 42, 76: 44, 80: 48, 112: 64 };
+export const getReceiptColumns = (paperWidth: ThermalPaperWidth): number => COLUMNS_BY_WIDTH[paperWidth] ?? 32;
 
 const stripUnsupportedCharacters = (value: string): string => value
   .normalize('NFD')
@@ -65,7 +69,7 @@ const formatDrawHeading = (drawName: string, drawTime?: string): string => {
 };
 
 export function formatThermalReceipt(ticket: Ticket, draws: Draw[], paperWidth: ThermalPaperWidth = 58): string {
-  const width = paperWidth === 58 ? 32 : 48;
+  const width = getReceiptColumns(paperWidth);
   const drawGroups = normalizeTicketDrawEntries(ticket);
   const lines = [
     center('LOTTOPRO', width),
@@ -112,7 +116,7 @@ export function formatThermalReceipt(ticket: Ticket, draws: Draw[], paperWidth: 
 }
 
 export function getThermalReceiptBoldLines(ticket: Ticket, draws: Draw[], paperWidth: ThermalPaperWidth): Set<string> {
-  const width = paperWidth === 58 ? 32 : 48;
+  const width = getReceiptColumns(paperWidth);
   const drawGroups = normalizeTicketDrawEntries(ticket);
   const drawHeadings = new Set(drawGroups.flatMap((group) => {
     const draw = draws.find((item) => item.id === group.drawId);

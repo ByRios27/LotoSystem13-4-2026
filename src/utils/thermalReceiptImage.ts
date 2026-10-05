@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 import type { Draw, Ticket } from '../store/useStore';
 import { formatAMPM, getCustomerDisplayName } from './helpers';
-import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidth } from './thermalReceipt';
+import { formatThermalReceipt, getReceiptColumns, getThermalReceiptBoldLines, type ThermalPaperWidth } from './thermalReceipt';
 
 const MAX_OUTPUT_DIMENSION = 24000;
 const MAX_PIXEL_AREA = 24000000;
@@ -47,7 +47,7 @@ const wrapText = (value: string, maxChars: number): string[] => {
 };
 
 function getHeaderMetadata(ticket: Ticket, draws: Draw[], paperWidth: ThermalPaperWidth): string[] {
-  const columns = paperWidth === 58 ? 32 : 48;
+  const columns = getReceiptColumns(paperWidth);
   const date = new Date(ticket.timestamp);
   const dateTime = `${date.toLocaleDateString('es-ES')} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
@@ -92,7 +92,7 @@ export async function createThermalReceiptImages(
   draws: Draw[],
   paperWidth: ThermalPaperWidth,
 ): Promise<Blob> {
-  const columns = paperWidth === 58 ? 32 : 48;
+  const columns = getReceiptColumns(paperWidth);
   const imageWidth = columns * 12;
   const headerLines = getHeaderMetadata(ticket, draws, paperWidth);
   const fullTextLines = formatThermalReceipt(ticket, draws, paperWidth).split('\n');

@@ -9,7 +9,7 @@ import { Share as CapacitorShare } from '@capacitor/share';
 import { exportNodeAsAdaptivePng, exportNodeAsPng } from '../utils/shareImage';
 import { formatAMPM, formatCurrency } from '../utils/helpers';
 import { formatThermalReceipt, getThermalReceiptBoldLines, type ThermalPaperWidth } from '../utils/thermalReceipt';
-import { getDefaultThermalPrinter, isNativePrinterAvailable, printThermalText } from '../services/printerService';
+import { getDefaultThermalPrinter, getWebPaperWidth, getWebPrinter, isNativePrinterAvailable, isWebBluetoothAvailable, printThermalPreview, printThermalText, printWebBluetoothText } from '../services/printerService';
 import { createThermalReceiptImages } from '../utils/thermalReceiptImage';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -27,7 +27,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
   const [showThermalPreview, setShowThermalPreview] = useState(false);
   const [printNotice, setPrintNotice] = useState<string | null>(null);
   const printNoticeTimeoutRef = useRef<number | null>(null);
-  const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>(58);
+  const [paperWidth, setPaperWidth] = useState<ThermalPaperWidth>(() => (isNativePrinterAvailable() ? 58 : getWebPaperWidth()));
   
   const currentDraws = useStore((state) => state.draws);
   const draws = useMemo(() => {
@@ -190,7 +190,15 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose, saleC
     setIsPrinting(true);
     try {
       if (!isNativePrinterAvailable()) {
-        notifyPrint('No hay dispositivo conectado');
+        if (getWebPrinter() && isWebBluetoothAvailable()) {
+          await printWebBluetoothText(formatThermalReceipt(ticket, draws, paperWidth));
+          return;
+        }
+        await printThermalPreview(
+          formatThermalReceipt(ticket, draws, paperWidth),
+          paperWidth,
+          getThermalReceiptBoldLines(ticket, draws, paperWidth),
+        );
         return;
       }
       const defaultPrinter = await getDefaultThermalPrinter();

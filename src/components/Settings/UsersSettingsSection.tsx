@@ -10,7 +10,8 @@ import { generateSellerId, cn } from '../../utils/helpers';
 import { PinValidationModal } from '../PinValidationModal';
 
 
-const ROLES: User['role'][] = ['seller', 'leader'];
+const ROLES: User['role'][] = ['seller', 'leader', 'CEO'];
+const roleLabel = (role: string) => (role === 'CEO' ? 'CEO' : role.charAt(0).toUpperCase() + role.slice(1));
 
 const EMAIL_DOMAIN = '@lottopro.system';
 
@@ -193,7 +194,7 @@ const AddUserForm: React.FC<{ onUserAdded: () => void }> = ({ onUserAdded }) => 
             <div className="form-group">
               <label>Rol</label>
               <select value={role} onChange={e => setRole(e.target.value as User['role'])}>
-                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                {ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -305,7 +306,7 @@ export const UsersSettingsSection = () => {
                         </div>
                         <div className="form-group"><label>Rol</label>
                             <select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as User['role']})}>
-                                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                                {ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                             </select>
                         </div>
                         <div className="flex gap-3 pt-1">
